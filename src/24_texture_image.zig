@@ -884,7 +884,7 @@ const HelloTriangleApplication = struct {
 
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
-        try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_src_bit = true, .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
+        try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
 
         try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
         try self.copyBufferToImage(staging_buffer, self.texture_image, @intCast(u32, tex_width), @intCast(u32, tex_height));

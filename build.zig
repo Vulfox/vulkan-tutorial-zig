@@ -29,6 +29,8 @@ pub fn build(b: *std.build.Builder) !void {
         shaders.addShader("frag_22", "src/22_shader_ubo.frag");
         shaders.addShader("vert_26", "src/26_shader_textures.vert");
         shaders.addShader("frag_26", "src/26_shader_textures.frag");
+        shaders.addShader("vert_27", "src/27_shader_depth.vert");
+        shaders.addShader("frag_27", "src/27_shader_depth.frag");
 
         var itr = dir.iterate();
         while (try itr.next()) |entry| {

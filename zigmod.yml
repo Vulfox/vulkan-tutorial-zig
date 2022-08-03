@@ -1,6 +1,9 @@
 name: vulkan-tutorial-zig
 root_dependencies:
 - src: git https://github.com/kooparse/zalgebra
+- src: git https://github.com/ziglibs/wavefront-obj
+  name: wavefront-obj
+  main: wavefront-obj.zig
 
 build_dependencies:
 - src: git https://github.com/hexops/mach-glfw

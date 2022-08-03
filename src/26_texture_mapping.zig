@@ -902,7 +902,7 @@ const HelloTriangleApplication = struct {
 
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
-        try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_src_bit = true, .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
+        try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
 
         try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
         try self.copyBufferToImage(staging_buffer, self.texture_image, @intCast(u32, tex_width), @intCast(u32, tex_height));
@@ -942,7 +942,7 @@ const HelloTriangleApplication = struct {
     }
 
     fn createImageView(self: *Self, image: vk.Image, format: vk.Format) !vk.ImageView {
-        return try self.vkd.createImageView(self.device, &.{
+        const view_info = vk.ImageViewCreateInfo{
             .flags = .{},
             .image = image,
             .view_type = .@"2d",
@@ -955,7 +955,8 @@ const HelloTriangleApplication = struct {
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
-        }, null);
+        };
+        return try self.vkd.createImageView(self.device, &view_info, null);
     }
 
     fn createImage(self: *Self, image_width: u32, image_height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags, image: *vk.Image, image_memory: *vk.DeviceMemory) !void {
