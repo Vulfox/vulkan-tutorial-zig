@@ -622,7 +622,7 @@ const HelloTriangleApplication = struct {
             pipeline_info.len,
             &pipeline_info,
             null,
-            std.mem.bytesAsSlice(vk.Pipeline, std.mem.asBytes(&self.graphics_pipeline)).ptr,
+            @ptrCast([*]vk.Pipeline, &self.graphics_pipeline),
         );
     }
 
