@@ -3,6 +3,7 @@ const std = @import("std");
 const deps = @import("deps.zig");
 const glfw = deps.imports.build_glfw;
 const vkgen = deps.imports.vk_gen;
+const vkbuild = deps.imports.vk_build;
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -14,6 +15,11 @@ pub fn build(b: *std.build.Builder) !void {
 
         var dir = try std.fs.cwd().openDir(src_dir, .{ .iterate = true });
         defer dir.close();
+
+        // shader resources, to be compiled using glslc
+        const shaders = vkbuild.ResourceGenStep.init(b, "resources.zig");
+        shaders.addShader("vert_09", "src/09_shader_base.vert");
+        shaders.addShader("frag_09", "src/09_shader_base.frag");
 
         var itr = dir.iterate();
         while (try itr.next()) |entry| {
@@ -38,6 +44,7 @@ pub fn build(b: *std.build.Builder) !void {
                     // vulkan-zig: Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
                     const gen = vkgen.VkGenerateStep.init(b, deps.cache ++ "/git/github.com/Snektron/vulkan-zig/examples/vk.xml", "vk.zig");
                     exe.addPackage(gen.package);
+                    exe.addPackage(shaders.package);
 
                     const run_cmd = exe.run();
                     run_cmd.step.dependOn(b.getInstallStep());

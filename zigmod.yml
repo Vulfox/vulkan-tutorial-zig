@@ -6,3 +6,6 @@ build_dependencies:
 - src: git https://github.com/Snektron/vulkan-zig
   main: generator/index.zig
   name: vk_gen
+- src: git https://github.com/Snektron/vulkan-zig
+  main: build.zig
+  name: vk_build
