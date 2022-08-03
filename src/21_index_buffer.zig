@@ -1030,10 +1030,11 @@ const HelloTriangleApplication = struct {
     }
 
     fn createShaderModule(self: *Self, code: []const u8) !vk.ShaderModule {
+        const aligned_code = std.mem.bytesAsSlice(u32, @alignCast(@alignOf(u32), code));
         return try self.vkd.createShaderModule(self.device, &.{
             .flags = .{},
             .code_size = code.len,
-            .p_code = @ptrCast([*]const u32, @alignCast(@alignOf(u32), code)),
+            .p_code = aligned_code.ptr,
         }, null);
     }
 
