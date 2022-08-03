@@ -25,6 +25,8 @@ pub fn build(b: *std.build.Builder) !void {
         shaders.addShader("frag_09", "src/09_shader_base.frag");
         shaders.addShader("vert_18", "src/18_shader_vertexbuffer.vert");
         shaders.addShader("frag_18", "src/18_shader_vertexbuffer.frag");
+        shaders.addShader("vert_22", "src/22_shader_ubo.vert");
+        shaders.addShader("frag_22", "src/22_shader_ubo.frag");
 
         var itr = dir.iterate();
         while (try itr.next()) |entry| {
@@ -49,6 +51,9 @@ pub fn build(b: *std.build.Builder) !void {
                     // vulkan-zig
                     exe.addPackage(gen.package);
                     exe.addPackage(shaders.package);
+
+                    // zigmod fetched deps
+                    deps.addAllTo(exe);
 
                     const run_cmd = exe.run();
                     run_cmd.step.dependOn(b.getInstallStep());

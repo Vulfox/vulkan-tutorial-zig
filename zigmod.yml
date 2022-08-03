@@ -1,4 +1,7 @@
 name: vulkan-tutorial-zig
+root_dependencies:
+- src: git https://github.com/kooparse/zalgebra
+
 build_dependencies:
 - src: git https://github.com/hexops/mach-glfw
   main: build.zig
