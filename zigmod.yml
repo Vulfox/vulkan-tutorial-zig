@@ -1,0 +1,8 @@
+name: vulkan-tutorial-zig
+build_dependencies:
+- src: git https://github.com/hexops/mach-glfw
+  main: build.zig
+  name: build_glfw
+- src: git https://github.com/Snektron/vulkan-zig
+  main: generator/index.zig
+  name: vk_gen
