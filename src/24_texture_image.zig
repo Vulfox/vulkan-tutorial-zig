@@ -7,6 +7,10 @@ const vk = @import("vulkan");
 const za = @import("zalgebra");
 const resources = @import("resources");
 
+const c = @cImport({
+    @cInclude("stb_image.h");
+});
+
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
 
@@ -46,24 +50,31 @@ const InstanceDispatch = vk.InstanceWrapper(.{
 const DeviceDispatch = vk.DeviceWrapper(.{
     .acquireNextImageKHR = true,
     .allocateCommandBuffers = true,
+    .allocateDescriptorSets = true,
     .allocateMemory = true,
     .beginCommandBuffer = true,
     .bindBufferMemory = true,
+    .bindImageMemory = true,
     .cmdBeginRenderPass = true,
+    .cmdBindDescriptorSets = true,
     .cmdBindIndexBuffer = true,
     .cmdBindPipeline = true,
     .cmdBindVertexBuffers = true,
     .cmdCopyBuffer = true,
+    .cmdCopyBufferToImage = true,
     .cmdDrawIndexed = true,
     .cmdEndRenderPass = true,
+    .cmdPipelineBarrier = true,
     .cmdSetViewport = true,
     .cmdSetScissor = true,
     .createBuffer = true,
     .createCommandPool = true,
+    .createDescriptorPool = true,
     .createDescriptorSetLayout = true,
     .createFence = true,
     .createFramebuffer = true,
     .createGraphicsPipelines = true,
+    .createImage = true,
     .createImageView = true,
     .createPipelineLayout = true,
     .createRenderPass = true,
@@ -72,10 +83,12 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .createSwapchainKHR = true,
     .destroyBuffer = true,
     .destroyCommandPool = true,
+    .destroyDescriptorPool = true,
     .destroyDescriptorSetLayout = true,
     .destroyDevice = true,
     .destroyFence = true,
     .destroyFramebuffer = true,
+    .destroyImage = true,
     .destroyImageView = true,
     .destroyPipeline = true,
     .destroyPipelineLayout = true,
@@ -89,6 +102,7 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .freeMemory = true,
     .getBufferMemoryRequirements = true,
     .getDeviceQueue = true,
+    .getImageMemoryRequirements = true,
     .getSwapchainImagesKHR = true,
     .mapMemory = true,
     .queuePresentKHR = true,
@@ -97,6 +111,7 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .resetCommandBuffer = true,
     .resetFences = true,
     .unmapMemory = true,
+    .updateDescriptorSets = true,
     .waitForFences = true,
 });
 
@@ -204,6 +219,9 @@ const HelloTriangleApplication = struct {
 
     command_pool: vk.CommandPool = .null_handle,
 
+    texture_image: vk.Image = .null_handle,
+    texture_image_memory: vk.DeviceMemory = .null_handle,
+
     vertex_buffer: vk.Buffer = .null_handle,
     vertex_buffer_memory: vk.DeviceMemory = .null_handle,
     index_buffer: vk.Buffer = .null_handle,
@@ -211,6 +229,9 @@ const HelloTriangleApplication = struct {
 
     uniform_buffers: ?[]vk.Buffer = null,
     uniform_buffers_memory: ?[]vk.DeviceMemory = null,
+
+    descriptor_pool: vk.DescriptorPool = .null_handle,
+    descriptor_sets: ?[]vk.DescriptorSet = null,
 
     command_buffers: ?[]vk.CommandBuffer = null,
 
@@ -262,9 +283,12 @@ const HelloTriangleApplication = struct {
         try self.createGraphicsPipeline();
         try self.createFramebuffers();
         try self.createCommandPool();
+        try self.createTextureImage();
         try self.createVertexBuffer();
         try self.createIndexBuffer();
         try self.createUniformBuffers();
+        try self.createDescriptorPool();
+        try self.createDescriptorSets();
         try self.createCommandBuffers();
         try self.createSyncObjects();
     }
@@ -325,6 +349,12 @@ const HelloTriangleApplication = struct {
             }
             self.allocator.free(self.uniform_buffers_memory.?);
         }
+
+        if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
+        if (self.descriptor_sets != null) self.allocator.free(self.descriptor_sets.?);
+
+        if (self.texture_image != .null_handle) self.vkd.destroyImage(self.device, self.texture_image, null);
+        if (self.texture_image_memory != .null_handle) self.vkd.freeMemory(self.device, self.texture_image_memory, null);
 
         if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
 
@@ -719,7 +749,7 @@ const HelloTriangleApplication = struct {
             .rasterizer_discard_enable = vk.FALSE,
             .polygon_mode = .fill,
             .cull_mode = .{ .back_bit = true },
-            .front_face = .clockwise,
+            .front_face = .counter_clockwise,
             .depth_bias_enable = vk.FALSE,
             .depth_bias_constant_factor = 0,
             .depth_bias_clamp = 0,
@@ -829,6 +859,140 @@ const HelloTriangleApplication = struct {
         }, null);
     }
 
+    fn createTextureImage(self: *Self) !void {
+        var tex_width: c_int = undefined;
+        var tex_height: c_int = undefined;
+        var channels: c_int = undefined;
+        const pixels = c.stbi_load("resources/texture.jpg", &tex_width, &tex_height, &channels, c.STBI_rgb_alpha);
+        defer c.stbi_image_free(pixels);
+        if (pixels == null) {
+            return error.ImageLoadFailure;
+        }
+
+        const image_size: vk.DeviceSize = @intCast(u64, tex_width) * @intCast(u64, tex_height) * 4;
+
+        var staging_buffer: vk.Buffer = undefined;
+        var staging_buffer_memory: vk.DeviceMemory = undefined;
+        try self.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
+
+        const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, image_size, .{});
+
+        const aligned_data = @ptrCast([*]u8, data);
+        for (pixels[0..@intCast(usize, image_size)]) |pixel, i| {
+            aligned_data[i] = pixel;
+        }
+
+        self.vkd.unmapMemory(self.device, staging_buffer_memory);
+
+        try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_src_bit = true, .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
+
+        try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
+        try self.copyBufferToImage(staging_buffer, self.texture_image, @intCast(u32, tex_width), @intCast(u32, tex_height));
+        try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .transfer_dst_optimal, .shader_read_only_optimal);
+
+        self.vkd.destroyBuffer(self.device, staging_buffer, null);
+        self.vkd.freeMemory(self.device, staging_buffer_memory, null);
+    }
+
+    fn createImage(self: *Self, image_width: u32, image_height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags, image: *vk.Image, image_memory: *vk.DeviceMemory) !void {
+        const image_info = vk.ImageCreateInfo{
+            .flags = .{},
+            .queue_family_index_count = 0,
+            .p_queue_family_indices = undefined,
+            .image_type = .@"2d",
+            .extent = .{
+                .width = image_width,
+                .height = image_height,
+                .depth = 1,
+            },
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = format,
+            .tiling = tiling,
+            .initial_layout = .@"undefined",
+            .usage = usage,
+            .samples = .{ .@"1_bit" = true },
+            .sharing_mode = .exclusive,
+        };
+
+        image.* = try self.vkd.createImage(self.device, &image_info, null);
+
+        const mem_requirements = self.vkd.getImageMemoryRequirements(self.device, image.*);
+
+        const alloc_info = vk.MemoryAllocateInfo{
+            .allocation_size = mem_requirements.size,
+            .memory_type_index = try self.findMemoryType(mem_requirements.memory_type_bits, properties),
+        };
+        image_memory.* = try self.vkd.allocateMemory(self.device, &alloc_info, null);
+        try self.vkd.bindImageMemory(self.device, image.*, image_memory.*, 0);
+    }
+
+    fn transitionImageLayout(self: *Self, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void {
+        const command_buffer = try self.beginSingleTimeCommands();
+
+        var barrier = vk.ImageMemoryBarrier{
+            .old_layout = old_layout,
+            .new_layout = new_layout,
+            .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+            .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+            .src_access_mask = .{},
+            .dst_access_mask = .{},
+            .image = image,
+            .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        };
+
+        var source_stage: vk.PipelineStageFlags = undefined;
+        var destination_stage: vk.PipelineStageFlags = undefined;
+
+        if (old_layout == .@"undefined" and new_layout == .transfer_dst_optimal) {
+            barrier.src_access_mask = .{};
+            barrier.dst_access_mask = .{ .transfer_write_bit = true };
+
+            source_stage = .{ .top_of_pipe_bit = true };
+            destination_stage = .{ .transfer_bit = true };
+        } else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal) {
+            barrier.src_access_mask = .{ .transfer_write_bit = true };
+            barrier.dst_access_mask = .{ .shader_read_bit = true };
+
+            source_stage = .{ .transfer_bit = true };
+            destination_stage = .{ .fragment_shader_bit = true };
+        } else {
+            return error.UnsupportedLayoutTransition;
+        }
+
+        self.vkd.cmdPipelineBarrier(command_buffer, source_stage, destination_stage, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+
+        try self.endSingleTimeCommands(command_buffer);
+    }
+
+    fn copyBufferToImage(self: *Self, buffer: vk.Buffer, image: vk.Image, image_width: u32, image_height: u32) !void {
+        const command_buffer = try self.beginSingleTimeCommands();
+
+        const region = [_]vk.BufferImageCopy{.{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .image_subresource = .{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .image_offset = .{ .x = 0, .y = 0, .z = 0 },
+            .image_extent = .{ .width = image_width, .height = image_height, .depth = 1 },
+        }};
+
+        self.vkd.cmdCopyBufferToImage(command_buffer, buffer, image, .transfer_dst_optimal, region.len, &region);
+
+        try self.endSingleTimeCommands(command_buffer);
+    }
+
     fn createVertexBuffer(self: *Self) !void {
         const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(vertices));
 
@@ -886,6 +1050,53 @@ const HelloTriangleApplication = struct {
         }
     }
 
+    fn createDescriptorPool(self: *Self) !void {
+        const pool_sizes = [_]vk.DescriptorPoolSize{.{
+            .type = .uniform_buffer,
+            .descriptor_count = MAX_FRAMES_IN_FLIGHT,
+        }};
+        const pool_info = vk.DescriptorPoolCreateInfo{
+            .flags = .{},
+            .pool_size_count = pool_sizes.len,
+            .p_pool_sizes = &pool_sizes,
+            .max_sets = MAX_FRAMES_IN_FLIGHT,
+        };
+        self.descriptor_pool = try self.vkd.createDescriptorPool(self.device, &pool_info, null);
+    }
+
+    fn createDescriptorSets(self: *Self) !void {
+        const layouts = [_]vk.DescriptorSetLayout{ self.descriptor_set_layout, self.descriptor_set_layout };
+        const alloc_info = vk.DescriptorSetAllocateInfo{
+            .descriptor_pool = self.descriptor_pool,
+            .descriptor_set_count = MAX_FRAMES_IN_FLIGHT,
+            .p_set_layouts = &layouts,
+        };
+        self.descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, MAX_FRAMES_IN_FLIGHT);
+
+        try self.vkd.allocateDescriptorSets(self.device, &alloc_info, self.descriptor_sets.?.ptr);
+
+        for (self.descriptor_sets.?) |descriptor_set, i| {
+            const buffer_info = [_]vk.DescriptorBufferInfo{.{
+                .buffer = self.uniform_buffers.?[i],
+                .offset = 0,
+                .range = @sizeOf(UniformBufferObject),
+            }};
+
+            const descriptor_write = [_]vk.WriteDescriptorSet{.{
+                .dst_set = descriptor_set,
+                .dst_binding = 0,
+                .dst_array_element = 0,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .p_buffer_info = &buffer_info,
+                .p_image_info = undefined,
+                .p_texel_buffer_view = undefined,
+            }};
+
+            self.vkd.updateDescriptorSets(self.device, descriptor_write.len, &descriptor_write, 0, undefined);
+        }
+    }
+
     fn createBuffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags, buffer: *vk.Buffer, buffer_memory: *vk.DeviceMemory) !void {
         buffer.* = try self.vkd.createBuffer(self.device, &.{
             .flags = .{},
@@ -905,7 +1116,7 @@ const HelloTriangleApplication = struct {
         try self.vkd.bindBufferMemory(self.device, buffer.*, buffer_memory.*, 0);
     }
 
-    fn copyBuffer(self: *Self, src_buffer: vk.Buffer, dst_buffer: vk.Buffer, size: vk.DeviceSize) !void {
+    fn beginSingleTimeCommands(self: *Self) !vk.CommandBuffer {
         const alloc_info = vk.CommandBufferAllocateInfo{
             .level = .primary,
             .command_pool = self.command_pool,
@@ -922,13 +1133,10 @@ const HelloTriangleApplication = struct {
 
         try self.vkd.beginCommandBuffer(command_buffer, &begin_info);
 
-        const copy_region = [_]vk.BufferCopy{.{
-            .src_offset = 0,
-            .dst_offset = 0,
-            .size = size,
-        }};
-        self.vkd.cmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
+        return command_buffer;
+    }
 
+    fn endSingleTimeCommands(self: *Self, command_buffer: vk.CommandBuffer) !void {
         try self.vkd.endCommandBuffer(command_buffer);
 
         const submit_info = vk.SubmitInfo{
@@ -944,6 +1152,19 @@ const HelloTriangleApplication = struct {
         try self.vkd.queueWaitIdle(self.graphics_queue);
 
         self.vkd.freeCommandBuffers(self.device, self.command_pool, 1, @ptrCast([*]const vk.CommandBuffer, &command_buffer));
+    }
+
+    fn copyBuffer(self: *Self, src_buffer: vk.Buffer, dst_buffer: vk.Buffer, size: vk.DeviceSize) !void {
+        var command_buffer = try self.beginSingleTimeCommands();
+
+        const copy_region = [_]vk.BufferCopy{.{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = size,
+        }};
+        self.vkd.cmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
+
+        try self.endSingleTimeCommands(command_buffer);
     }
 
     fn findMemoryType(self: *Self, type_filter: u32, properties: vk.MemoryPropertyFlags) !u32 {
@@ -1013,6 +1234,8 @@ const HelloTriangleApplication = struct {
             self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
 
             self.vkd.cmdBindIndexBuffer(command_buffer, self.index_buffer, 0, vk.IndexType.uint16);
+
+            self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
             self.vkd.cmdDrawIndexed(command_buffer, indices_input.len, 1, 0, 0, 0);
         }

@@ -966,18 +966,21 @@ const HelloTriangleApplication = struct {
     }
 
     fn copyBuffer(self: *Self, src_buffer: vk.Buffer, dst_buffer: vk.Buffer, size: vk.DeviceSize) !void {
-        var command_buffer: vk.CommandBuffer = undefined;
-        try self.vkd.allocateCommandBuffers(self.device, &.{
-            .command_pool = self.command_pool,
+        const alloc_info = vk.CommandBufferAllocateInfo{
             .level = .primary,
+            .command_pool = self.command_pool,
             .command_buffer_count = 1,
-        }, @ptrCast([*]vk.CommandBuffer, &command_buffer));
-        defer self.vkd.freeCommandBuffers(self.device, self.command_pool, 1, @ptrCast([*]const vk.CommandBuffer, &command_buffer));
+        };
 
-        try self.vkd.beginCommandBuffer(command_buffer, &.{
+        var command_buffer: vk.CommandBuffer = undefined;
+        try self.vkd.allocateCommandBuffers(self.device, &alloc_info, @ptrCast([*]vk.CommandBuffer, &command_buffer));
+
+        const begin_info = vk.CommandBufferBeginInfo{
             .flags = .{ .one_time_submit_bit = true },
             .p_inheritance_info = null,
-        });
+        };
+
+        try self.vkd.beginCommandBuffer(command_buffer, &begin_info);
 
         const copy_region = [_]vk.BufferCopy{.{
             .src_offset = 0,
@@ -999,6 +1002,8 @@ const HelloTriangleApplication = struct {
         };
         try self.vkd.queueSubmit(self.graphics_queue, 1, @ptrCast([*]const vk.SubmitInfo, &submit_info), .null_handle);
         try self.vkd.queueWaitIdle(self.graphics_queue);
+
+        self.vkd.freeCommandBuffers(self.device, self.command_pool, 1, @ptrCast([*]const vk.CommandBuffer, &command_buffer));
     }
 
     fn findMemoryType(self: *Self, type_filter: u32, properties: vk.MemoryPropertyFlags) !u32 {

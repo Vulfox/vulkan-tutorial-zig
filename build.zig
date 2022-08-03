@@ -27,6 +27,8 @@ pub fn build(b: *std.build.Builder) !void {
         shaders.addShader("frag_18", "src/18_shader_vertexbuffer.frag");
         shaders.addShader("vert_22", "src/22_shader_ubo.vert");
         shaders.addShader("frag_22", "src/22_shader_ubo.frag");
+        shaders.addShader("vert_26", "src/26_shader_textures.vert");
+        shaders.addShader("frag_26", "src/26_shader_textures.frag");
 
         var itr = dir.iterate();
         while (try itr.next()) |entry| {
@@ -43,6 +45,10 @@ pub fn build(b: *std.build.Builder) !void {
                     const exe = b.addExecutable(entry.name[0 .. entry.name.len - 4], file_location);
                     exe.setTarget(target);
                     exe.setBuildMode(mode);
+
+                    exe.linkLibC();
+                    exe.addIncludeDir("libs/stb");
+                    exe.addCSourceFile("libs/stb/stb_impl.c", &.{"-std=c99"});
 
                     // mach-glfw
                     exe.addPackage(glfw.pkg);
