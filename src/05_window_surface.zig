@@ -22,17 +22,27 @@ const BaseDispatch = vk.BaseWrapper(.{
 
 const InstanceDispatch = vk.InstanceWrapper(.{
     .createDebugUtilsMessengerEXT = enable_validation_layers,
+    .createDevice = true,
     .destroyDebugUtilsMessengerEXT = enable_validation_layers,
     .destroyInstance = true,
+    .destroySurfaceKHR = true,
     .enumeratePhysicalDevices = true,
+    .getDeviceProcAddr = true,
     .getPhysicalDeviceQueueFamilyProperties = true,
+    .getPhysicalDeviceSurfaceSupportKHR = true,
+});
+
+const DeviceDispatch = vk.DeviceWrapper(.{
+    .destroyDevice = true,
+    .getDeviceQueue = true,
 });
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
+    present_family: ?u32 = null,
 
     fn isComplete(self: *const QueueFamilyIndices) bool {
-        return self.graphics_family != null;
+        return self.graphics_family != null and self.present_family != null;
     }
 };
 
@@ -44,11 +54,17 @@ const HelloTriangleApplication = struct {
 
     vkb: BaseDispatch = undefined,
     vki: InstanceDispatch = undefined,
+    vkd: DeviceDispatch = undefined,
 
     instance: vk.Instance = .null_handle,
     debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
+    surface: vk.SurfaceKHR = .null_handle,
 
     physical_device: vk.PhysicalDevice = .null_handle,
+    device: vk.Device = .null_handle,
+
+    graphics_queue: vk.Queue = .null_handle,
+    present_queue: vk.Queue = .null_handle,
 
     pub fn init(allocator: Allocator) Self {
         return Self{ .allocator = allocator };
@@ -71,7 +87,9 @@ const HelloTriangleApplication = struct {
     fn initVulkan(self: *Self) !void {
         try self.createInstance();
         try self.setupDebugMessenger();
+        try self.createSurface();
         try self.pickPhysicalDevice();
+        try self.createLogicalDevice();
     }
 
     fn mainLoop(self: *Self) !void {
@@ -81,8 +99,11 @@ const HelloTriangleApplication = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
+
         if (enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
+        if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
 
         if (self.window != null) self.window.?.destroy();
@@ -159,6 +180,12 @@ const HelloTriangleApplication = struct {
         self.debug_messenger = try self.vki.createDebugUtilsMessengerEXT(self.instance, &create_info, null);
     }
 
+    fn createSurface(self: *Self) !void {
+        if ((try glfw.createWindowSurface(self.instance, self.window.?, null, &self.surface)) != @enumToInt(vk.Result.success)) {
+            return error.SurfaceInitFailed;
+        }
+    }
+
     fn pickPhysicalDevice(self: *Self) !void {
         var device_count: u32 = undefined;
         _ = try self.vki.enumeratePhysicalDevices(self.instance, &device_count, null);
@@ -183,6 +210,49 @@ const HelloTriangleApplication = struct {
         }
     }
 
+    fn createLogicalDevice(self: *Self) !void {
+        const indices = try self.findQueueFamilies(self.physical_device);
+        const queue_priority = [_]f32{1};
+
+        var queue_create_info = [_]vk.DeviceQueueCreateInfo{
+            .{
+                .flags = .{},
+                .queue_family_index = indices.graphics_family.?,
+                .queue_count = 1,
+                .p_queue_priorities = &queue_priority,
+            },
+            .{
+                .flags = .{},
+                .queue_family_index = indices.present_family.?,
+                .queue_count = 1,
+                .p_queue_priorities = &queue_priority,
+            },
+        };
+
+        var create_info = vk.DeviceCreateInfo{
+            .flags = .{},
+            .queue_create_info_count = queue_create_info.len,
+            .p_queue_create_infos = &queue_create_info,
+            .enabled_layer_count = 0,
+            .pp_enabled_layer_names = undefined,
+            .enabled_extension_count = 0,
+            .pp_enabled_extension_names = undefined,
+            .p_enabled_features = null,
+        };
+
+        if (enable_validation_layers) {
+            create_info.enabled_layer_count = validation_layers.len;
+            create_info.pp_enabled_layer_names = &validation_layers;
+        }
+
+        self.device = try self.vki.createDevice(self.physical_device, &create_info, null);
+
+        self.vkd = try DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr);
+
+        self.graphics_queue = self.vkd.getDeviceQueue(self.device, indices.graphics_family.?, 0);
+        self.present_queue = self.vkd.getDeviceQueue(self.device, indices.present_family.?, 0);
+    }
+
     fn isDeviceSuitable(self: *Self, device: vk.PhysicalDevice) !bool {
         const indices = try self.findQueueFamilies(device);
 
@@ -200,8 +270,10 @@ const HelloTriangleApplication = struct {
         self.vki.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
 
         for (queue_families) |queue_family, i| {
-            if (queue_family.queue_flags.graphics_bit) {
+            if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit) {
                 indices.graphics_family = @intCast(u32, i);
+            } else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(u32, i), self.surface)) == vk.TRUE) {
+                indices.present_family = @intCast(u32, i);
             }
 
             if (indices.isComplete()) {

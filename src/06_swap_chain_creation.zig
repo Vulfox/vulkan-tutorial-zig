@@ -10,6 +10,8 @@ const HEIGHT: u32 = 600;
 
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
+const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
+
 const enable_validation_layers: bool = switch (builtin.mode) {
     .Debug, .ReleaseSafe => true,
     else => false,
@@ -25,21 +27,47 @@ const InstanceDispatch = vk.InstanceWrapper(.{
     .createDevice = true,
     .destroyDebugUtilsMessengerEXT = enable_validation_layers,
     .destroyInstance = true,
+    .destroySurfaceKHR = true,
+    .enumerateDeviceExtensionProperties = true,
     .enumeratePhysicalDevices = true,
     .getDeviceProcAddr = true,
     .getPhysicalDeviceQueueFamilyProperties = true,
+    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
+    .getPhysicalDeviceSurfaceFormatsKHR = true,
+    .getPhysicalDeviceSurfacePresentModesKHR = true,
+    .getPhysicalDeviceSurfaceSupportKHR = true,
 });
 
 const DeviceDispatch = vk.DeviceWrapper(.{
+    .createSwapchainKHR = true,
     .destroyDevice = true,
+    .destroySwapchainKHR = true,
     .getDeviceQueue = true,
+    .getSwapchainImagesKHR = true,
 });
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
+    present_family: ?u32 = null,
 
     fn isComplete(self: *const QueueFamilyIndices) bool {
-        return self.graphics_family != null;
+        return self.graphics_family != null and self.present_family != null;
+    }
+};
+
+pub const SwapChainSupportDetails = struct {
+    allocator: Allocator,
+    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+    formats: ?[]vk.SurfaceFormatKHR = null,
+    present_modes: ?[]vk.PresentModeKHR = null,
+
+    pub fn init(allocator: Allocator) SwapChainSupportDetails {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: SwapChainSupportDetails) void {
+        if (self.formats != null) self.allocator.free(self.formats.?);
+        if (self.present_modes != null) self.allocator.free(self.present_modes.?);
     }
 };
 
@@ -55,11 +83,18 @@ const HelloTriangleApplication = struct {
 
     instance: vk.Instance = .null_handle,
     debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
+    surface: vk.SurfaceKHR = .null_handle,
 
     physical_device: vk.PhysicalDevice = .null_handle,
     device: vk.Device = .null_handle,
 
     graphics_queue: vk.Queue = .null_handle,
+    present_queue: vk.Queue = .null_handle,
+
+    swap_chain: vk.SwapchainKHR = .null_handle,
+    swap_chain_images: ?[]vk.Image = null,
+    swap_chain_image_format: vk.Format = .@"undefined",
+    swap_chain_extent: vk.Extent2D = .{ .width = 0, .height = 0 },
 
     pub fn init(allocator: Allocator) Self {
         return Self{ .allocator = allocator };
@@ -82,8 +117,10 @@ const HelloTriangleApplication = struct {
     fn initVulkan(self: *Self) !void {
         try self.createInstance();
         try self.setupDebugMessenger();
+        try self.createSurface();
         try self.pickPhysicalDevice();
         try self.createLogicalDevice();
+        try self.createSwapChain();
     }
 
     fn mainLoop(self: *Self) !void {
@@ -93,10 +130,13 @@ const HelloTriangleApplication = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        if (self.swap_chain_images != null) self.allocator.free(self.swap_chain_images.?);
+        if (self.swap_chain != .null_handle) self.vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
         if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
 
         if (enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
+        if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
 
         if (self.window != null) self.window.?.destroy();
@@ -173,6 +213,12 @@ const HelloTriangleApplication = struct {
         self.debug_messenger = try self.vki.createDebugUtilsMessengerEXT(self.instance, &create_info, null);
     }
 
+    fn createSurface(self: *Self) !void {
+        if ((try glfw.createWindowSurface(self.instance, self.window.?, null, &self.surface)) != @enumToInt(vk.Result.success)) {
+            return error.SurfaceInitFailed;
+        }
+    }
+
     fn pickPhysicalDevice(self: *Self) !void {
         var device_count: u32 = undefined;
         _ = try self.vki.enumeratePhysicalDevices(self.instance, &device_count, null);
@@ -201,12 +247,20 @@ const HelloTriangleApplication = struct {
         const indices = try self.findQueueFamilies(self.physical_device);
         const queue_priority = [_]f32{1};
 
-        var queue_create_info = [_]vk.DeviceQueueCreateInfo{.{
-            .flags = .{},
-            .queue_family_index = indices.graphics_family.?,
-            .queue_count = 1,
-            .p_queue_priorities = &queue_priority,
-        }};
+        var queue_create_info = [_]vk.DeviceQueueCreateInfo{
+            .{
+                .flags = .{},
+                .queue_family_index = indices.graphics_family.?,
+                .queue_count = 1,
+                .p_queue_priorities = &queue_priority,
+            },
+            .{
+                .flags = .{},
+                .queue_family_index = indices.present_family.?,
+                .queue_count = 1,
+                .p_queue_priorities = &queue_priority,
+            },
+        };
 
         var create_info = vk.DeviceCreateInfo{
             .flags = .{},
@@ -214,8 +268,8 @@ const HelloTriangleApplication = struct {
             .p_queue_create_infos = &queue_create_info,
             .enabled_layer_count = 0,
             .pp_enabled_layer_names = undefined,
-            .enabled_extension_count = 0,
-            .pp_enabled_extension_names = undefined,
+            .enabled_extension_count = device_extensions.len,
+            .pp_enabled_extension_names = &device_extensions,
             .p_enabled_features = null,
         };
 
@@ -229,12 +283,152 @@ const HelloTriangleApplication = struct {
         self.vkd = try DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr);
 
         self.graphics_queue = self.vkd.getDeviceQueue(self.device, indices.graphics_family.?, 0);
+        self.present_queue = self.vkd.getDeviceQueue(self.device, indices.present_family.?, 0);
+    }
+
+    fn createSwapChain(self: *Self) !void {
+        const swap_chain_support = try self.querySwapChainSupport(self.physical_device);
+        defer swap_chain_support.deinit();
+
+        const surface_format: vk.SurfaceFormatKHR = chooseSwapSurfaceFormat(swap_chain_support.formats.?);
+        const present_mode: vk.PresentModeKHR = chooseSwapPresentMode(swap_chain_support.present_modes.?);
+        const extent: vk.Extent2D = try self.chooseSwapExtent(swap_chain_support.capabilities);
+
+        var image_count = swap_chain_support.capabilities.min_image_count + 1;
+        if (swap_chain_support.capabilities.max_image_count > 0) {
+            image_count = std.math.min(image_count, swap_chain_support.capabilities.max_image_count);
+        }
+
+        const indices = try self.findQueueFamilies(self.physical_device);
+        const queue_family_indices = [_]u32{ indices.graphics_family.?, indices.present_family.? };
+        const sharing_mode: vk.SharingMode = if (indices.graphics_family.? != indices.present_family.?)
+            .concurrent
+        else
+            .exclusive;
+
+        self.swap_chain = try self.vkd.createSwapchainKHR(self.device, &.{
+            .flags = .{},
+            .surface = self.surface,
+            .min_image_count = image_count,
+            .image_format = surface_format.format,
+            .image_color_space = surface_format.color_space,
+            .image_extent = extent,
+            .image_array_layers = 1,
+            .image_usage = .{ .color_attachment_bit = true },
+            .image_sharing_mode = sharing_mode,
+            .queue_family_index_count = queue_family_indices.len,
+            .p_queue_family_indices = &queue_family_indices,
+            .pre_transform = swap_chain_support.capabilities.current_transform,
+            .composite_alpha = .{ .opaque_bit_khr = true },
+            .present_mode = present_mode,
+            .clipped = vk.TRUE,
+            .old_swapchain = .null_handle,
+        }, null);
+
+        _ = try self.vkd.getSwapchainImagesKHR(self.device, self.swap_chain, &image_count, null);
+        self.swap_chain_images = try self.allocator.alloc(vk.Image, image_count);
+        _ = try self.vkd.getSwapchainImagesKHR(self.device, self.swap_chain, &image_count, self.swap_chain_images.?.ptr);
+
+        self.swap_chain_image_format = surface_format.format;
+        self.swap_chain_extent = extent;
+    }
+
+    fn chooseSwapSurfaceFormat(available_formats: []vk.SurfaceFormatKHR) vk.SurfaceFormatKHR {
+        for (available_formats) |available_format| {
+            if (available_format.format == .b8g8r8a8_srgb and available_format.color_space == .srgb_nonlinear_khr) {
+                return available_format;
+            }
+        }
+
+        return available_formats[0];
+    }
+
+    fn chooseSwapPresentMode(available_present_modes: []vk.PresentModeKHR) vk.PresentModeKHR {
+        for (available_present_modes) |available_present_mode| {
+            if (available_present_mode == .mailbox_khr) {
+                return available_present_mode;
+            }
+        }
+
+        return .fifo_khr;
+    }
+
+    fn chooseSwapExtent(self: *Self, capabilities: vk.SurfaceCapabilitiesKHR) !vk.Extent2D {
+        if (capabilities.current_extent.width != 0xFFFF_FFFF) {
+            return capabilities.current_extent;
+        } else {
+            const window_size = try self.window.?.getFramebufferSize();
+
+            return vk.Extent2D{
+                .width = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+                .height = std.math.clamp(window_size.height, capabilities.min_image_extent.height, capabilities.max_image_extent.height),
+            };
+        }
+    }
+
+    fn querySwapChainSupport(self: *Self, device: vk.PhysicalDevice) !SwapChainSupportDetails {
+        var details = SwapChainSupportDetails.init(self.allocator);
+
+        details.capabilities = try self.vki.getPhysicalDeviceSurfaceCapabilitiesKHR(device, self.surface);
+
+        var format_count: u32 = undefined;
+        _ = try self.vki.getPhysicalDeviceSurfaceFormatsKHR(device, self.surface, &format_count, null);
+
+        if (format_count != 0) {
+            details.formats = try details.allocator.alloc(vk.SurfaceFormatKHR, format_count);
+            _ = try self.vki.getPhysicalDeviceSurfaceFormatsKHR(device, self.surface, &format_count, details.formats.?.ptr);
+        }
+
+        var present_mode_count: u32 = undefined;
+        _ = try self.vki.getPhysicalDeviceSurfacePresentModesKHR(device, self.surface, &present_mode_count, null);
+
+        if (present_mode_count != 0) {
+            details.present_modes = try details.allocator.alloc(vk.PresentModeKHR, present_mode_count);
+            _ = try self.vki.getPhysicalDeviceSurfacePresentModesKHR(device, self.surface, &present_mode_count, details.present_modes.?.ptr);
+        }
+
+        return details;
     }
 
     fn isDeviceSuitable(self: *Self, device: vk.PhysicalDevice) !bool {
         const indices = try self.findQueueFamilies(device);
 
-        return indices.isComplete();
+        const extensions_supported = try self.checkDeviceExtensionSupport(device);
+
+        var swap_chain_adequate = false;
+        if (extensions_supported) {
+            const swap_chain_support = try self.querySwapChainSupport(device);
+            defer swap_chain_support.deinit();
+
+            swap_chain_adequate = swap_chain_support.formats != null and swap_chain_support.present_modes != null;
+        }
+
+        return indices.isComplete() and extensions_supported and swap_chain_adequate;
+    }
+
+    fn checkDeviceExtensionSupport(self: *Self, device: vk.PhysicalDevice) !bool {
+        var extension_count: u32 = undefined;
+        _ = try self.vki.enumerateDeviceExtensionProperties(device, null, &extension_count, null);
+
+        const available_extensions = try self.allocator.alloc(vk.ExtensionProperties, extension_count);
+        defer self.allocator.free(available_extensions);
+        _ = try self.vki.enumerateDeviceExtensionProperties(device, null, &extension_count, available_extensions.ptr);
+
+        const required_extensions = device_extensions[0..];
+
+        for (required_extensions) |required_extension| {
+            for (available_extensions) |available_extension| {
+                const len = std.mem.indexOfScalar(u8, &available_extension.extension_name, 0).?;
+                const available_extension_name = available_extension.extension_name[0..len];
+                if (std.mem.eql(u8, std.mem.span(required_extension), available_extension_name)) {
+                    break;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     fn findQueueFamilies(self: *Self, device: vk.PhysicalDevice) !QueueFamilyIndices {
@@ -248,8 +442,10 @@ const HelloTriangleApplication = struct {
         self.vki.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
 
         for (queue_families) |queue_family, i| {
-            if (queue_family.queue_flags.graphics_bit) {
+            if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit) {
                 indices.graphics_family = @intCast(u32, i);
+            } else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(u32, i), self.surface)) == vk.TRUE) {
+                indices.present_family = @intCast(u32, i);
             }
 
             if (indices.isComplete()) {

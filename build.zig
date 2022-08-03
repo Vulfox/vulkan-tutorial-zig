@@ -10,8 +10,7 @@ pub fn build(b: *std.build.Builder) !void {
 
     // Find all zig files in src and create run steps for each of the tutorials.
     {
-        const src_dir = try std.fs.path.join(b.allocator, &.{ b.build_root, "src" }); //try std.fmt.allocPrint(b.allocator, "src/{s}", .{entry.name});
-        defer b.allocator.free(src_dir);
+        const src_dir = try std.fs.path.join(b.allocator, &.{ b.build_root, "src" });
 
         var dir = try std.fs.cwd().openDir(src_dir, .{ .iterate = true });
         defer dir.close();
@@ -23,7 +22,7 @@ pub fn build(b: *std.build.Builder) !void {
                     if (entry.name.len < 5 or !std.mem.endsWith(u8, entry.name, ".zig")) {
                         continue;
                     }
-                    const file_location = try std.fs.path.join(b.allocator, &.{ src_dir, entry.name }); //try std.fmt.allocPrint(b.allocator, "src/{s}", .{entry.name});
+                    const file_location = try std.fs.path.join(b.allocator, &.{ src_dir, entry.name });
                     defer b.allocator.free(file_location);
                     const run_txt = try std.fmt.allocPrint(b.allocator, "run-{s}", .{entry.name[0..2]});
                     defer b.allocator.free(run_txt);

@@ -8,7 +8,7 @@ const vk = @import("vulkan");
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
 
-const validation_layers = [_][]const u8{"VK_LAYER_KHRONOS_validation"};
+const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
 const enable_validation_layers: bool = switch (builtin.mode) {
     .Debug, .ReleaseSafe => true,
@@ -102,12 +102,12 @@ const HelloTriangleApplication = struct {
             .enabled_layer_count = 0,
             .pp_enabled_layer_names = undefined,
             .enabled_extension_count = @intCast(u32, extensions.items.len),
-            .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &extensions.items[0]),
+            .pp_enabled_extension_names = extensions.items.ptr,
         };
 
         if (enable_validation_layers) {
-            create_info.enabled_layer_count = @intCast(u32, validation_layers.len);
-            create_info.pp_enabled_layer_names = @ptrCast([*]const [*:0]const u8, &validation_layers[0]);
+            create_info.enabled_layer_count = validation_layers.len;
+            create_info.pp_enabled_layer_names = &validation_layers;
 
             var debug_create_info: vk.DebugUtilsMessengerCreateInfoEXT = undefined;
             populateDebugMessengerCreateInfo(&debug_create_info);
@@ -163,13 +163,13 @@ const HelloTriangleApplication = struct {
 
         var available_layers = try self.allocator.alloc(vk.LayerProperties, layer_count);
         defer self.allocator.free(available_layers);
-        _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, @ptrCast([*]vk.LayerProperties, @alignCast(@alignOf(vk.LayerProperties), available_layers)));
+        _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, available_layers.ptr);
 
         for (validation_layers) |layer_name| {
             var layer_found: bool = false;
 
             for (available_layers) |layer_properties| {
-                if (layer_name.len <= vk.MAX_EXTENSION_NAME_SIZE and std.mem.eql(u8, layer_name, layer_properties.layer_name[0..layer_name.len])) {
+                if (std.cstr.cmp(@ptrCast([*:0]const u8, &layer_properties.layer_name), layer_name) == 0) {
                     layer_found = true;
                     break;
                 }
