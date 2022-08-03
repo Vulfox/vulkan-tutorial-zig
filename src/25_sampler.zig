@@ -1539,7 +1539,9 @@ const HelloTriangleApplication = struct {
             var layer_found: bool = false;
 
             for (available_layers) |layer_properties| {
-                if (std.cstr.cmp(@ptrCast([*:0]const u8, &layer_properties.layer_name), layer_name) == 0) {
+                const available_len = std.mem.indexOfScalar(u8, &layer_properties.layer_name, 0).?;
+                const available_layer_name = layer_properties.layer_name[0..available_len];
+                if (std.mem.eql(u8, std.mem.span(layer_name), available_layer_name)) {
                     layer_found = true;
                     break;
                 }

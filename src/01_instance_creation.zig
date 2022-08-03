@@ -80,7 +80,7 @@ const HelloTriangleApplication = struct {
             .enabled_layer_count = 0,
             .pp_enabled_layer_names = undefined,
             .enabled_extension_count = @intCast(u32, glfw_extensions.len),
-            .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &glfw_extensions[0]),
+            .pp_enabled_extension_names = glfw_extensions.ptr,
         };
 
         self.instance = try self.vkb.createInstance(&create_info, null);
