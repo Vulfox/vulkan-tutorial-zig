@@ -140,6 +140,7 @@ const HelloTriangleApplication = struct {
             }
             self.allocator.free(self.swap_chain_image_views.?);
         }
+
         if (self.swap_chain_images != null) self.allocator.free(self.swap_chain_images.?);
         if (self.swap_chain != .null_handle) self.vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
         if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);

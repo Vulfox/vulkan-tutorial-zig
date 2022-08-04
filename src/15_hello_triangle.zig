@@ -191,9 +191,7 @@ const HelloTriangleApplication = struct {
 
     pub fn deinit(self: *Self) void {
         if (self.render_finished_semaphore != .null_handle) self.vkd.destroySemaphore(self.device, self.render_finished_semaphore, null);
-
         if (self.image_available_semaphore != .null_handle) self.vkd.destroySemaphore(self.device, self.image_available_semaphore, null);
-
         if (self.in_flight_fence != .null_handle) self.vkd.destroyFence(self.device, self.in_flight_fence, null);
 
         if (self.command_pool != .null_handle) self.vkd.destroyCommandPool(self.device, self.command_pool, null);

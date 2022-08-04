@@ -869,7 +869,7 @@ const HelloTriangleApplication = struct {
 
         try self.vkd.endCommandBuffer(command_buffer);
 
-        const submit_info = vk.SubmitInfo{
+        const submit_infos = [_]vk.SubmitInfo{.{
             .wait_semaphore_count = 0,
             .p_wait_semaphores = undefined,
             .p_wait_dst_stage_mask = undefined,
@@ -877,8 +877,8 @@ const HelloTriangleApplication = struct {
             .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &command_buffer),
             .signal_semaphore_count = 0,
             .p_signal_semaphores = undefined,
-        };
-        try self.vkd.queueSubmit(self.graphics_queue, 1, @ptrCast([*]const vk.SubmitInfo, &submit_info), .null_handle);
+        }};
+        try self.vkd.queueSubmit(self.graphics_queue, submit_infos.len, &submit_infos, .null_handle);
         try self.vkd.queueWaitIdle(self.graphics_queue);
 
         self.vkd.freeCommandBuffers(self.device, self.command_pool, 1, @ptrCast([*]const vk.CommandBuffer, &command_buffer));
