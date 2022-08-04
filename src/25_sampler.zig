@@ -878,12 +878,7 @@ const HelloTriangleApplication = struct {
         try self.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, image_size, .{});
-
-        const aligned_data = @ptrCast([*]u8, data);
-        for (pixels[0..@intCast(usize, image_size)]) |pixel, i| {
-            aligned_data[i] = pixel;
-        }
-
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], pixels[0..image_size]);
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
@@ -979,7 +974,7 @@ const HelloTriangleApplication = struct {
     fn transitionImageLayout(self: *Self, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void {
         const command_buffer = try self.beginSingleTimeCommands();
 
-        var barrier = vk.ImageMemoryBarrier{
+        var barrier = [_]vk.ImageMemoryBarrier{.{
             .old_layout = old_layout,
             .new_layout = new_layout,
             .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
@@ -994,20 +989,20 @@ const HelloTriangleApplication = struct {
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
-        };
+        }};
 
         var source_stage: vk.PipelineStageFlags = undefined;
         var destination_stage: vk.PipelineStageFlags = undefined;
 
         if (old_layout == .@"undefined" and new_layout == .transfer_dst_optimal) {
-            barrier.src_access_mask = .{};
-            barrier.dst_access_mask = .{ .transfer_write_bit = true };
+            barrier[0].src_access_mask = .{};
+            barrier[0].dst_access_mask = .{ .transfer_write_bit = true };
 
             source_stage = .{ .top_of_pipe_bit = true };
             destination_stage = .{ .transfer_bit = true };
         } else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal) {
-            barrier.src_access_mask = .{ .transfer_write_bit = true };
-            barrier.dst_access_mask = .{ .shader_read_bit = true };
+            barrier[0].src_access_mask = .{ .transfer_write_bit = true };
+            barrier[0].dst_access_mask = .{ .shader_read_bit = true };
 
             source_stage = .{ .transfer_bit = true };
             destination_stage = .{ .fragment_shader_bit = true };
@@ -1015,7 +1010,7 @@ const HelloTriangleApplication = struct {
             return error.UnsupportedLayoutTransition;
         }
 
-        self.vkd.cmdPipelineBarrier(command_buffer, source_stage, destination_stage, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+        self.vkd.cmdPipelineBarrier(command_buffer, source_stage, destination_stage, .{}, 0, undefined, 0, undefined, barrier.len, &barrier);
 
         try self.endSingleTimeCommands(command_buffer);
     }

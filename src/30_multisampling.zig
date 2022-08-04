@@ -1055,7 +1055,7 @@ const HelloTriangleApplication = struct {
 
         const command_buffer = try self.beginSingleTimeCommands();
 
-        var barrier = vk.ImageMemoryBarrier{
+        var barrier = [_]vk.ImageMemoryBarrier{.{
             .image = image,
             .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
             .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
@@ -1070,7 +1070,7 @@ const HelloTriangleApplication = struct {
             .dst_access_mask = .{},
             .old_layout = undefined,
             .new_layout = undefined,
-        };
+        }};
 
         var mip_width: u32 = tex_width;
         var mip_height: u32 = tex_height;
@@ -1078,15 +1078,15 @@ const HelloTriangleApplication = struct {
         var i: u32 = 1;
 
         while (i < mip_levels) : (i += 1) {
-            barrier.subresource_range.base_mip_level = i - 1;
-            barrier.old_layout = .transfer_dst_optimal;
-            barrier.new_layout = .transfer_src_optimal;
-            barrier.src_access_mask = .{ .transfer_write_bit = true };
-            barrier.dst_access_mask = .{ .transfer_read_bit = true };
+            barrier[0].subresource_range.base_mip_level = i - 1;
+            barrier[0].old_layout = .transfer_dst_optimal;
+            barrier[0].new_layout = .transfer_src_optimal;
+            barrier[0].src_access_mask = .{ .transfer_write_bit = true };
+            barrier[0].dst_access_mask = .{ .transfer_read_bit = true };
 
-            self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+            self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, barrier.len, &barrier);
 
-            const blit = vk.ImageBlit{
+            const blit = [_]vk.ImageBlit{.{
                 .src_offsets = [2]vk.Offset3D{
                     .{ .x = 0, .y = 0, .z = 0 },
                     .{ .x = @intCast(i32, mip_width), .y = @intCast(i32, mip_height), .z = 1 },
@@ -1107,28 +1107,28 @@ const HelloTriangleApplication = struct {
                     .base_array_layer = 0,
                     .layer_count = 1,
                 },
-            };
+            }};
 
-            self.vkd.cmdBlitImage(command_buffer, image, .transfer_src_optimal, image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.ImageBlit, &blit), vk.Filter.linear);
+            self.vkd.cmdBlitImage(command_buffer, image, .transfer_src_optimal, image, .transfer_dst_optimal, blit.len, &blit, vk.Filter.linear);
 
-            barrier.old_layout = .transfer_src_optimal;
-            barrier.new_layout = .shader_read_only_optimal;
-            barrier.src_access_mask = .{ .transfer_read_bit = true };
-            barrier.dst_access_mask = .{ .shader_read_bit = true };
+            barrier[0].old_layout = .transfer_src_optimal;
+            barrier[0].new_layout = .shader_read_only_optimal;
+            barrier[0].src_access_mask = .{ .transfer_read_bit = true };
+            barrier[0].dst_access_mask = .{ .shader_read_bit = true };
 
-            self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+            self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, barrier.len, &barrier);
 
             if (mip_width > 1) mip_width /= 2;
             if (mip_height > 1) mip_height /= 2;
         }
 
-        barrier.subresource_range.base_mip_level = mip_levels - 1;
-        barrier.old_layout = .transfer_dst_optimal;
-        barrier.new_layout = .shader_read_only_optimal;
-        barrier.src_access_mask = .{ .transfer_write_bit = true };
-        barrier.dst_access_mask = .{ .shader_read_bit = true };
+        barrier[0].subresource_range.base_mip_level = mip_levels - 1;
+        barrier[0].old_layout = .transfer_dst_optimal;
+        barrier[0].new_layout = .shader_read_only_optimal;
+        barrier[0].src_access_mask = .{ .transfer_write_bit = true };
+        barrier[0].dst_access_mask = .{ .shader_read_bit = true };
 
-        self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+        self.vkd.cmdPipelineBarrier(command_buffer, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, barrier.len, &barrier);
 
         try self.endSingleTimeCommands(command_buffer);
     }
@@ -1230,7 +1230,7 @@ const HelloTriangleApplication = struct {
     fn transitionImageLayout(self: *Self, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout, mip_levels: u32) !void {
         const command_buffer = try self.beginSingleTimeCommands();
 
-        var barrier = vk.ImageMemoryBarrier{
+        var barrier = [_]vk.ImageMemoryBarrier{.{
             .old_layout = old_layout,
             .new_layout = new_layout,
             .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
@@ -1245,20 +1245,20 @@ const HelloTriangleApplication = struct {
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
-        };
+        }};
 
         var source_stage: vk.PipelineStageFlags = undefined;
         var destination_stage: vk.PipelineStageFlags = undefined;
 
         if (old_layout == .@"undefined" and new_layout == .transfer_dst_optimal) {
-            barrier.src_access_mask = .{};
-            barrier.dst_access_mask = .{ .transfer_write_bit = true };
+            barrier[0].src_access_mask = .{};
+            barrier[0].dst_access_mask = .{ .transfer_write_bit = true };
 
             source_stage = .{ .top_of_pipe_bit = true };
             destination_stage = .{ .transfer_bit = true };
         } else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal) {
-            barrier.src_access_mask = .{ .transfer_write_bit = true };
-            barrier.dst_access_mask = .{ .shader_read_bit = true };
+            barrier[0].src_access_mask = .{ .transfer_write_bit = true };
+            barrier[0].dst_access_mask = .{ .shader_read_bit = true };
 
             source_stage = .{ .transfer_bit = true };
             destination_stage = .{ .fragment_shader_bit = true };
@@ -1266,7 +1266,7 @@ const HelloTriangleApplication = struct {
             return error.UnsupportedLayoutTransition;
         }
 
-        self.vkd.cmdPipelineBarrier(command_buffer, source_stage, destination_stage, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier));
+        self.vkd.cmdPipelineBarrier(command_buffer, source_stage, destination_stage, .{}, 0, undefined, 0, undefined, barrier.len, &barrier);
 
         try self.endSingleTimeCommands(command_buffer);
     }
