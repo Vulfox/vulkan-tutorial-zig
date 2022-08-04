@@ -49,7 +49,7 @@ pub fn build(b: *std.build.Builder) !void {
                     exe.setBuildMode(mode);
 
                     exe.linkLibC();
-                    exe.addIncludeDir("libs/stb");
+                    exe.addIncludeDir(deps.cache ++ "/git/github.com/nothings/stb");
                     exe.addCSourceFile("libs/stb/stb_impl.c", &.{"-std=c99"});
 
                     // mach-glfw

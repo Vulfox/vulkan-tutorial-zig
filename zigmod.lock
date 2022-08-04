@@ -4,3 +4,4 @@ git https://github.com/ziglibs/wavefront-obj commit-b6777afdfede6f4eced449a3f400
 git https://github.com/ziglibs/zlm commit-e9da7f084055eb3fab0454ef4d5db0a103ff96df
 git https://github.com/hexops/mach-glfw commit-8faba61460011758598b8db26a1caa7e0fc0829b
 git https://github.com/Snektron/vulkan-zig commit-f6f5f66f20ba7e387bc34507b62bfd3cf1a49bb5
+git https://github.com/nothings/stb commit-af1a5bc352164740c1cc1354942b1c6b72eacb8a
