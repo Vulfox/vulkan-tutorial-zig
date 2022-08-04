@@ -1346,7 +1346,7 @@ const HelloTriangleApplication = struct {
         };
         _ = try self.vkd.queueSubmit(self.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fences.?[self.current_frame]);
 
-        var present_result = self.vkd.queuePresentKHR(self.present_queue, &.{
+        const present_result = self.vkd.queuePresentKHR(self.present_queue, &.{
             .wait_semaphore_count = signal_semaphores.len,
             .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &signal_semaphores),
             .swapchain_count = 1,
