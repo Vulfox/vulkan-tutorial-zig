@@ -894,12 +894,7 @@ const HelloTriangleApplication = struct {
         try self.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, image_size, .{});
-
-        const aligned_data = @ptrCast([*]u8, data);
-        for (pixels[0..@intCast(usize, image_size)]) |pixel, i| {
-            aligned_data[i] = pixel;
-        }
-
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], pixels[0..image_size]);
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
@@ -1066,11 +1061,7 @@ const HelloTriangleApplication = struct {
         try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
-        // copy vertices to data
-        const aligned_data = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
-        for (vertices) |vertex, i| {
-            aligned_data[i] = vertex;
-        }
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&vertices));
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true }, &self.vertex_buffer, &self.vertex_buffer_memory);
@@ -1089,10 +1080,7 @@ const HelloTriangleApplication = struct {
         try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
-        const gpu_indices = @ptrCast([*]u16, @alignCast(@alignOf(u16), data));
-        for (indices_input) |index, i| {
-            gpu_indices[i] = index;
-        }
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&indices_input));
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .{ .device_local_bit = true }, &self.index_buffer, &self.index_buffer_memory);
@@ -1357,10 +1345,7 @@ const HelloTriangleApplication = struct {
         ubo.proj.data[1][1] *= -1;
 
         const data = try self.vkd.mapMemory(self.device, self.uniform_buffers_memory.?[current_image], 0, @sizeOf(UniformBufferObject), .{});
-
-        const aligned_data = @ptrCast(*UniformBufferObject, @alignCast(@alignOf(UniformBufferObject), data));
-        aligned_data.* = ubo;
-
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
         self.vkd.unmapMemory(self.device, self.uniform_buffers_memory.?[current_image]);
     }
 

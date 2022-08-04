@@ -787,13 +787,8 @@ const HelloTriangleApplication = struct {
         try self.vkd.bindBufferMemory(self.device, self.vertex_buffer, self.vertex_buffer_memory, 0);
 
         const data = try self.vkd.mapMemory(self.device, self.vertex_buffer_memory, 0, buffer_info.size, .{});
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_info.size], std.mem.sliceAsBytes(&vertices));
         defer self.vkd.unmapMemory(self.device, self.vertex_buffer_memory);
-
-        // copy vertices to data
-        const aligned_data = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
-        for (vertices) |vertex, i| {
-            aligned_data[i] = vertex;
-        }
     }
 
     fn findMemoryType(self: *Self, type_filter: u32, properties: vk.MemoryPropertyFlags) !u32 {
