@@ -157,7 +157,7 @@ const HelloTriangleApplication = struct {
     }
 
     fn createInstance(self: *Self) !void {
-        const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
+        const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
         if (enable_validation_layers and !try self.checkValidationLayerSupport()) {
@@ -530,7 +530,7 @@ const HelloTriangleApplication = struct {
         return true;
     }
 
-    fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT.IntType, _: vk.DebugUtilsMessageTypeFlagsEXT.IntType, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
+    fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
         if (p_callback_data != null) {
             std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message});
         }

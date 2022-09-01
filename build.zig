@@ -13,7 +13,7 @@ pub fn build(b: *std.build.Builder) !void {
     {
         const src_dir = try std.fs.path.join(b.allocator, &.{ b.build_root, "src" });
 
-        var dir = try std.fs.cwd().openDir(src_dir, .{ .iterate = true });
+        var dir = try std.fs.cwd().openIterableDir(src_dir, .{});
         defer dir.close();
 
         // generate vulkan package

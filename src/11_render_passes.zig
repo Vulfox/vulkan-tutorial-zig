@@ -171,7 +171,7 @@ const HelloTriangleApplication = struct {
     }
 
     fn createInstance(self: *Self) !void {
-        const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
+        const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
         if (enable_validation_layers and !try self.checkValidationLayerSupport()) {
@@ -530,14 +530,12 @@ const HelloTriangleApplication = struct {
     }
 
     fn createShaderModule(self: *Self, code: []const u8) !vk.ShaderModule {
-        const aligned_code = std.mem.bytesAsSlice(u32, @alignCast(@alignOf(u32), code));
         return try self.vkd.createShaderModule(self.device, &.{
             .flags = .{},
             .code_size = code.len,
-            .p_code = aligned_code.ptr,
+            .p_code = @ptrCast([*]const u32, code),
         }, null);
     }
-
     fn chooseSwapSurfaceFormat(available_formats: []vk.SurfaceFormatKHR) vk.SurfaceFormatKHR {
         for (available_formats) |available_format| {
             if (available_format.format == .b8g8r8a8_srgb and available_format.color_space == .srgb_nonlinear_khr) {
@@ -700,7 +698,7 @@ const HelloTriangleApplication = struct {
         return true;
     }
 
-    fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT.IntType, _: vk.DebugUtilsMessageTypeFlagsEXT.IntType, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
+    fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
         if (p_callback_data != null) {
             std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message});
         }
