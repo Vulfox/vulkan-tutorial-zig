@@ -5,6 +5,14 @@ const Allocator = std.mem.Allocator;
 const glfw = @import("glfw");
 const vk = @import("vulkan");
 
+// Vulkan pointer handles are non-optional pointers in current vulkan-zig.
+// Use a non-null sentinel to represent "not created yet".
+const null_instance: vk.Instance = @ptrFromInt(1);
+const null_physical_device: vk.PhysicalDevice = @ptrFromInt(1);
+const null_device: vk.Device = @ptrFromInt(1);
+const null_queue: vk.Queue = @ptrFromInt(1);
+const null_command_buffer: vk.CommandBuffer = @ptrFromInt(1);
+
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
 
@@ -15,18 +23,9 @@ const enable_validation_layers: bool = switch (builtin.mode) {
     else => false,
 };
 
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-    .enumerateInstanceLayerProperties = true,
-});
+const BaseDispatch = vk.BaseWrapper;
 
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .createDebugUtilsMessengerEXT = enable_validation_layers,
-    .destroyDebugUtilsMessengerEXT = enable_validation_layers,
-    .destroyInstance = true,
-    .enumeratePhysicalDevices = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-});
+const InstanceDispatch = vk.InstanceWrapper;
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
@@ -40,15 +39,15 @@ const HelloTriangleApplication = struct {
     const Self = @This();
     allocator: Allocator,
 
-    window: ?glfw.Window = null,
+    window: ?*glfw.Window = null,
 
     vkb: BaseDispatch = undefined,
     vki: InstanceDispatch = undefined,
 
-    instance: vk.Instance = .null_handle,
-    debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
+    instance: vk.Instance = null_instance,
+    debug_messenger: vk.DebugUtilsMessengerEXT = .null,
 
-    physical_device: vk.PhysicalDevice = .null_handle,
+    physical_device: vk.PhysicalDevice = null_physical_device,
 
     pub fn init(allocator: Allocator) Self {
         return Self{ .allocator = allocator };
@@ -61,11 +60,10 @@ const HelloTriangleApplication = struct {
     }
 
     fn initWindow(self: *Self) !void {
-        try glfw.init(.{});
-        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null, .{
-            .client_api = .no_api,
-            .resizable = false,
-        });
+        try glfw.init();
+        glfw.windowHint(.client_api, .no_api);
+        glfw.windowHint(.resizable, false);
+        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null);
     }
 
     fn initVulkan(self: *Self) !void {
@@ -76,14 +74,14 @@ const HelloTriangleApplication = struct {
 
     fn mainLoop(self: *Self) !void {
         while (!self.window.?.shouldClose()) {
-            try glfw.pollEvents();
+            glfw.pollEvents();
         }
     }
 
     pub fn deinit(self: *Self) void {
-        if (enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        if (enable_validation_layers and self.debug_messenger != .null) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
-        if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
+        if (self.instance != null_instance) self.vki.destroyInstance(self.instance, null);
 
         if (self.window != null) self.window.?.destroy();
 
@@ -91,8 +89,8 @@ const HelloTriangleApplication = struct {
     }
 
     fn createInstance(self: *Self) !void {
-        const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &glfw.getInstanceProcAddress);
-        self.vkb = try BaseDispatch.load(vk_proc);
+        const vk_proc = @as(*const fn (instance: ?vk.Instance, procname: [*:0]const u8) callconv(.c) vk.PfnVoidFunction, @ptrCast(&glfw.getInstanceProcAddress));
+        self.vkb = BaseDispatch.load(vk_proc);
 
         if (enable_validation_layers and !try self.checkValidationLayerSupport()) {
             return error.MissingValidationLayer;
@@ -100,10 +98,10 @@ const HelloTriangleApplication = struct {
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = "Hello Triangle",
-            .application_version = vk.makeApiVersion(1, 0, 0, 0),
+            .application_version = vk.makeApiVersion(1, 0, 0, 0).toU32(),
             .p_engine_name = "No Engine",
-            .engine_version = vk.makeApiVersion(1, 0, 0, 0),
-            .api_version = vk.API_VERSION_1_2,
+            .engine_version = vk.makeApiVersion(1, 0, 0, 0).toU32(),
+            .api_version = vk.API_VERSION_1_2.toU32(),
         };
 
         const extensions = try getRequiredExtensions(self.allocator);
@@ -113,8 +111,8 @@ const HelloTriangleApplication = struct {
             .flags = .{},
             .p_application_info = &app_info,
             .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
-            .enabled_extension_count = @intCast(u32, extensions.items.len),
+            .pp_enabled_layer_names = null,
+            .enabled_extension_count = @as(u32, @intCast(extensions.items.len)),
             .pp_enabled_extension_names = extensions.items.ptr,
         };
 
@@ -129,21 +127,21 @@ const HelloTriangleApplication = struct {
 
         self.instance = try self.vkb.createInstance(&create_info, null);
 
-        self.vki = try InstanceDispatch.load(self.instance, vk_proc);
+        self.vki = InstanceDispatch.load(self.instance, vk_proc);
     }
 
     fn populateDebugMessengerCreateInfo(create_info: *vk.DebugUtilsMessengerCreateInfoEXT) void {
         create_info.* = .{
             .flags = .{},
             .message_severity = .{
-                .verbose_bit_ext = true,
-                .warning_bit_ext = true,
-                .error_bit_ext = true,
+                .verbose_ext = true,
+                .warning_ext = true,
+                .error_ext = true,
             },
             .message_type = .{
-                .general_bit_ext = true,
-                .validation_bit_ext = true,
-                .performance_bit_ext = true,
+                .general_ext = true,
+                .validation_ext = true,
+                .performance_ext = true,
             },
             .pfn_user_callback = debugCallback,
             .p_user_data = null,
@@ -178,7 +176,7 @@ const HelloTriangleApplication = struct {
             }
         }
 
-        if (self.physical_device == .null_handle) {
+        if (self.physical_device == null_physical_device) {
             return error.NoSuitableDevice;
         }
     }
@@ -199,9 +197,9 @@ const HelloTriangleApplication = struct {
         defer self.allocator.free(queue_families);
         self.vki.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
 
-        for (queue_families) |queue_family, i| {
-            if (queue_family.queue_flags.graphics_bit) {
-                indices.graphics_family = @intCast(u32, i);
+        for (queue_families, 0..) |queue_family, i| {
+            if (queue_family.queue_flags.graphics) {
+                indices.graphics_family = @as(u32, @intCast(i));
             }
 
             if (indices.isComplete()) {
@@ -212,12 +210,12 @@ const HelloTriangleApplication = struct {
         return indices;
     }
 
-    fn getRequiredExtensions(allocator: Allocator) !std.ArrayListAligned([*:0]const u8, null) {
-        var extensions = std.ArrayList([*:0]const u8).init(allocator);
+    fn getRequiredExtensions(allocator: Allocator) !std.array_list.Managed([*:0]const u8) {
+        var extensions = std.array_list.Managed([*:0]const u8).init(allocator);
         try extensions.appendSlice(try glfw.getRequiredInstanceExtensions());
 
         if (enable_validation_layers) {
-            try extensions.append(vk.extension_info.ext_debug_utils.name);
+            try extensions.append(vk.instance_extensions.ext_debug_utils.name);
         }
 
         return extensions;
@@ -227,7 +225,7 @@ const HelloTriangleApplication = struct {
         var layer_count: u32 = undefined;
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, null);
 
-        var available_layers = try self.allocator.alloc(vk.LayerProperties, layer_count);
+        const available_layers = try self.allocator.alloc(vk.LayerProperties, layer_count);
         defer self.allocator.free(available_layers);
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, available_layers.ptr);
 
@@ -253,20 +251,20 @@ const HelloTriangleApplication = struct {
 
     fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
         if (p_callback_data != null) {
-            std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message});
+            std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message orelse "unknown"});
         }
 
-        return vk.FALSE;
+        return .false;
     }
 };
 
 pub fn main() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var safe_allocator = std.heap.SafeAllocator.init(std.heap.page_allocator, .{});
     defer {
-        const leaked = gpa.deinit();
-        if (leaked) std.log.err("MemLeak", .{});
+        const leaks = safe_allocator.deinit();
+        if (leaks != 0) std.log.err("MemLeak: {d} allocations", .{leaks});
     }
-    const allocator = gpa.allocator();
+    const allocator = safe_allocator.allocator();
 
     var app = HelloTriangleApplication.init(allocator);
     defer app.deinit();

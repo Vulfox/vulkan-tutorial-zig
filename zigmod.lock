@@ -1,7 +1,7 @@
 2
-git https://github.com/kooparse/zalgebra commit-e42edd142eb4ade38802663debf19bd6252224c1
-git https://github.com/Vulfox/wavefront-obj commit-867cffa4a74f0ee4d659a701ca2777c298591412
-git https://github.com/ziglibs/zlm commit-9b1b59220b7d971282b02dc00b6463ed8352ee7c
-git https://github.com/hexops/mach-glfw commit-b30ec077363bbd6eefec02dd3984c125a71ed8af
-git https://github.com/Snektron/vulkan-zig commit-5b5b7d047f627b4b9d3b56c609ac0bef8d5aaa1a
-git https://github.com/nothings/stb commit-af1a5bc352164740c1cc1354942b1c6b72eacb8a
+git https://github.com/KhronosGroup/Vulkan-Headers commit-73814d006638aa00bd553215b054f0f02e457e22
+git https://github.com/kooparse/zalgebra commit-b5ebfef29a76fffdf1bc5424ac4c9f49fe323df2
+git https://github.com/nothings/stb commit-003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5
+git https://github.com/zig-gamedev/system_sdk commit-777e76828f05d5d223df47a4c0de95ae4efde884
+git https://github.com/zig-gamedev/zglfw commit-2450fe3c4140091287c79cb41e4a8020af73d896
+git https://github.com/Snektron/vulkan-zig commit-1fa628fd49d89468241c2cab14bad41a312e79fc

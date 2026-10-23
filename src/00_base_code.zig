@@ -8,7 +8,7 @@ const HEIGHT: u32 = 600;
 const HelloTriangleApplication = struct {
     const Self = @This();
 
-    window: ?glfw.Window = null,
+    window: ?*glfw.Window = null,
 
     pub fn init() Self {
         return Self{};
@@ -21,18 +21,17 @@ const HelloTriangleApplication = struct {
     }
 
     fn initWindow(self: *Self) !void {
-        try glfw.init(.{});
-        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null, .{
-            .client_api = .no_api,
-            .resizable = false,
-        });
+        try glfw.init();
+        glfw.windowHint(.client_api, .no_api);
+        glfw.windowHint(.resizable, false);
+        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null);
     }
 
     fn initVulkan(_: *Self) !void {}
 
     fn mainLoop(self: *Self) !void {
         while (!self.window.?.shouldClose()) {
-            try glfw.pollEvents();
+            glfw.pollEvents();
         }
     }
 

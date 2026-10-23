@@ -1,19 +1,22 @@
 name: vulkan-tutorial-zig
 root_dependencies:
 - src: git https://github.com/kooparse/zalgebra
-- src: git https://github.com/Vulfox/wavefront-obj
-  version: branch-stage2
+# - src: git https://github.com/Vulfox/wavefront-obj
+#   version: branch-stage2
 
 build_dependencies:
-- src: git https://github.com/hexops/mach-glfw
-  main: build.zig
-  name: build_glfw
+# Source-only deps that build.zig wires up manually from the `zigmod fetch`
+# cache (see the `dep` namespace in build.zig). `keep: true` tells zigmod to
+# manage these repos verbatim although they have no zigmod manifest and the
+# right entry point for us is not what auto-detection would pick.
+- src: git https://github.com/zig-gamedev/zglfw
+  keep: true
+- src: git https://github.com/zig-gamedev/system_sdk
+  keep: true
 - src: git https://github.com/Snektron/vulkan-zig
-  main: generator/index.zig
-  name: vk_gen
-- src: git https://github.com/Snektron/vulkan-zig
-  main: build.zig
-  name: vk_build
+  version: branch-zig-0.17-compat
+  keep: true
+- src: git https://github.com/KhronosGroup/Vulkan-Headers
+  keep: true
 - src: git https://github.com/nothings/stb
-  name: stb
-  main: ''
+  keep: true

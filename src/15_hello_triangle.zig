@@ -4,6 +4,14 @@ const Allocator = std.mem.Allocator;
 
 const glfw = @import("glfw");
 const vk = @import("vulkan");
+
+// Vulkan pointer handles are non-optional pointers in current vulkan-zig.
+// Use a non-null sentinel to represent "not created yet".
+const null_instance: vk.Instance = @ptrFromInt(1);
+const null_physical_device: vk.PhysicalDevice = @ptrFromInt(1);
+const null_device: vk.Device = @ptrFromInt(1);
+const null_queue: vk.Queue = @ptrFromInt(1);
+const null_command_buffer: vk.CommandBuffer = @ptrFromInt(1);
 const resources = @import("resources");
 
 const WIDTH: u32 = 800;
@@ -13,75 +21,18 @@ const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
-const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
+const device_extensions = [_][*:0]const u8{vk.device_extensions.khr_swapchain.name};
 
 const enable_validation_layers: bool = switch (builtin.mode) {
     .Debug, .ReleaseSafe => true,
     else => false,
 };
 
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-    .enumerateInstanceLayerProperties = true,
-});
+const BaseDispatch = vk.BaseWrapper;
 
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .createDebugUtilsMessengerEXT = enable_validation_layers,
-    .createDevice = true,
-    .destroyDebugUtilsMessengerEXT = enable_validation_layers,
-    .destroyInstance = true,
-    .destroySurfaceKHR = true,
-    .enumerateDeviceExtensionProperties = true,
-    .enumeratePhysicalDevices = true,
-    .getDeviceProcAddr = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceSurfaceFormatsKHR = true,
-    .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceSupportKHR = true,
-});
+const InstanceDispatch = vk.InstanceWrapper;
 
-const DeviceDispatch = vk.DeviceWrapper(.{
-    .acquireNextImageKHR = true,
-    .allocateCommandBuffers = true,
-    .beginCommandBuffer = true,
-    .cmdBeginRenderPass = true,
-    .cmdBindPipeline = true,
-    .cmdDraw = true,
-    .cmdEndRenderPass = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .createCommandPool = true,
-    .createFence = true,
-    .createFramebuffer = true,
-    .createGraphicsPipelines = true,
-    .createImageView = true,
-    .createPipelineLayout = true,
-    .createRenderPass = true,
-    .createSemaphore = true,
-    .createShaderModule = true,
-    .createSwapchainKHR = true,
-    .destroyCommandPool = true,
-    .destroyDevice = true,
-    .destroyFence = true,
-    .destroyFramebuffer = true,
-    .destroyImageView = true,
-    .destroyPipeline = true,
-    .destroyPipelineLayout = true,
-    .destroyRenderPass = true,
-    .destroySemaphore = true,
-    .destroyShaderModule = true,
-    .destroySwapchainKHR = true,
-    .deviceWaitIdle = true,
-    .endCommandBuffer = true,
-    .getDeviceQueue = true,
-    .getSwapchainImagesKHR = true,
-    .queuePresentKHR = true,
-    .queueSubmit = true,
-    .resetCommandBuffer = true,
-    .resetFences = true,
-    .waitForFences = true,
-});
+const DeviceDispatch = vk.DeviceWrapper;
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
@@ -112,39 +63,39 @@ const HelloTriangleApplication = struct {
     const Self = @This();
     allocator: Allocator,
 
-    window: ?glfw.Window = null,
+    window: ?*glfw.Window = null,
 
     vkb: BaseDispatch = undefined,
     vki: InstanceDispatch = undefined,
     vkd: DeviceDispatch = undefined,
 
-    instance: vk.Instance = .null_handle,
-    debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
-    surface: vk.SurfaceKHR = .null_handle,
+    instance: vk.Instance = null_instance,
+    debug_messenger: vk.DebugUtilsMessengerEXT = .null,
+    surface: vk.SurfaceKHR = .null,
 
-    physical_device: vk.PhysicalDevice = .null_handle,
-    device: vk.Device = .null_handle,
+    physical_device: vk.PhysicalDevice = null_physical_device,
+    device: vk.Device = null_device,
 
-    graphics_queue: vk.Queue = .null_handle,
-    present_queue: vk.Queue = .null_handle,
+    graphics_queue: vk.Queue = null_queue,
+    present_queue: vk.Queue = null_queue,
 
-    swap_chain: vk.SwapchainKHR = .null_handle,
+    swap_chain: vk.SwapchainKHR = .null,
     swap_chain_images: ?[]vk.Image = null,
     swap_chain_image_format: vk.Format = .@"undefined",
     swap_chain_extent: vk.Extent2D = .{ .width = 0, .height = 0 },
     swap_chain_image_views: ?[]vk.ImageView = null,
     swap_chain_framebuffers: ?[]vk.Framebuffer = null,
 
-    render_pass: vk.RenderPass = .null_handle,
-    pipeline_layout: vk.PipelineLayout = .null_handle,
-    graphics_pipeline: vk.Pipeline = .null_handle,
+    render_pass: vk.RenderPass = .null,
+    pipeline_layout: vk.PipelineLayout = .null,
+    graphics_pipeline: vk.Pipeline = .null,
 
-    command_pool: vk.CommandPool = .null_handle,
-    command_buffer: vk.CommandBuffer = .null_handle,
+    command_pool: vk.CommandPool = .null,
+    command_buffer: vk.CommandBuffer = null_command_buffer,
 
-    image_available_semaphore: vk.Semaphore = .null_handle,
-    render_finished_semaphore: vk.Semaphore = .null_handle,
-    in_flight_fence: vk.Fence = .null_handle,
+    image_available_semaphore: vk.Semaphore = .null,
+    render_finished_semaphore: vk.Semaphore = .null,
+    in_flight_fence: vk.Fence = .null,
 
     pub fn init(allocator: Allocator) Self {
         return Self{ .allocator = allocator };
@@ -157,11 +108,10 @@ const HelloTriangleApplication = struct {
     }
 
     fn initWindow(self: *Self) !void {
-        try glfw.init(.{});
-        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null, .{
-            .client_api = .no_api,
-            .resizable = false,
-        });
+        try glfw.init();
+        glfw.windowHint(.client_api, .no_api);
+        glfw.windowHint(.resizable, false);
+        self.window = try glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null);
     }
 
     fn initVulkan(self: *Self) !void {
@@ -182,7 +132,7 @@ const HelloTriangleApplication = struct {
 
     fn mainLoop(self: *Self) !void {
         while (!self.window.?.shouldClose()) {
-            try glfw.pollEvents();
+            glfw.pollEvents();
             try self.drawFrame();
         }
 
@@ -190,11 +140,11 @@ const HelloTriangleApplication = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.render_finished_semaphore != .null_handle) self.vkd.destroySemaphore(self.device, self.render_finished_semaphore, null);
-        if (self.image_available_semaphore != .null_handle) self.vkd.destroySemaphore(self.device, self.image_available_semaphore, null);
-        if (self.in_flight_fence != .null_handle) self.vkd.destroyFence(self.device, self.in_flight_fence, null);
+        if (self.render_finished_semaphore != .null) self.vkd.destroySemaphore(self.device, self.render_finished_semaphore, null);
+        if (self.image_available_semaphore != .null) self.vkd.destroySemaphore(self.device, self.image_available_semaphore, null);
+        if (self.in_flight_fence != .null) self.vkd.destroyFence(self.device, self.in_flight_fence, null);
 
-        if (self.command_pool != .null_handle) self.vkd.destroyCommandPool(self.device, self.command_pool, null);
+        if (self.command_pool != .null) self.vkd.destroyCommandPool(self.device, self.command_pool, null);
 
         if (self.swap_chain_framebuffers != null) {
             for (self.swap_chain_framebuffers.?) |framebuffer| {
@@ -203,9 +153,9 @@ const HelloTriangleApplication = struct {
             self.allocator.free(self.swap_chain_framebuffers.?);
         }
 
-        if (self.graphics_pipeline != .null_handle) self.vkd.destroyPipeline(self.device, self.graphics_pipeline, null);
-        if (self.pipeline_layout != .null_handle) self.vkd.destroyPipelineLayout(self.device, self.pipeline_layout, null);
-        if (self.render_pass != .null_handle) self.vkd.destroyRenderPass(self.device, self.render_pass, null);
+        if (self.graphics_pipeline != .null) self.vkd.destroyPipeline(self.device, self.graphics_pipeline, null);
+        if (self.pipeline_layout != .null) self.vkd.destroyPipelineLayout(self.device, self.pipeline_layout, null);
+        if (self.render_pass != .null) self.vkd.destroyRenderPass(self.device, self.render_pass, null);
 
         if (self.swap_chain_image_views != null) {
             for (self.swap_chain_image_views.?) |image_view| {
@@ -215,13 +165,13 @@ const HelloTriangleApplication = struct {
         }
 
         if (self.swap_chain_images != null) self.allocator.free(self.swap_chain_images.?);
-        if (self.swap_chain != .null_handle) self.vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
-        if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
+        if (self.swap_chain != .null) self.vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
+        if (self.device != null_device) self.vkd.destroyDevice(self.device, null);
 
-        if (enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        if (enable_validation_layers and self.debug_messenger != .null) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
-        if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
-        if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
+        if (self.surface != .null) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
+        if (self.instance != null_instance) self.vki.destroyInstance(self.instance, null);
 
         if (self.window != null) self.window.?.destroy();
 
@@ -229,8 +179,8 @@ const HelloTriangleApplication = struct {
     }
 
     fn createInstance(self: *Self) !void {
-        const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &glfw.getInstanceProcAddress);
-        self.vkb = try BaseDispatch.load(vk_proc);
+        const vk_proc = @as(*const fn (instance: ?vk.Instance, procname: [*:0]const u8) callconv(.c) vk.PfnVoidFunction, @ptrCast(&glfw.getInstanceProcAddress));
+        self.vkb = BaseDispatch.load(vk_proc);
 
         if (enable_validation_layers and !try self.checkValidationLayerSupport()) {
             return error.MissingValidationLayer;
@@ -238,10 +188,10 @@ const HelloTriangleApplication = struct {
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = "Hello Triangle",
-            .application_version = vk.makeApiVersion(1, 0, 0, 0),
+            .application_version = vk.makeApiVersion(1, 0, 0, 0).toU32(),
             .p_engine_name = "No Engine",
-            .engine_version = vk.makeApiVersion(1, 0, 0, 0),
-            .api_version = vk.API_VERSION_1_2,
+            .engine_version = vk.makeApiVersion(1, 0, 0, 0).toU32(),
+            .api_version = vk.API_VERSION_1_2.toU32(),
         };
 
         const extensions = try getRequiredExtensions(self.allocator);
@@ -251,8 +201,8 @@ const HelloTriangleApplication = struct {
             .flags = .{},
             .p_application_info = &app_info,
             .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
-            .enabled_extension_count = @intCast(u32, extensions.items.len),
+            .pp_enabled_layer_names = null,
+            .enabled_extension_count = @as(u32, @intCast(extensions.items.len)),
             .pp_enabled_extension_names = extensions.items.ptr,
         };
 
@@ -267,21 +217,21 @@ const HelloTriangleApplication = struct {
 
         self.instance = try self.vkb.createInstance(&create_info, null);
 
-        self.vki = try InstanceDispatch.load(self.instance, vk_proc);
+        self.vki = InstanceDispatch.load(self.instance, vk_proc);
     }
 
     fn populateDebugMessengerCreateInfo(create_info: *vk.DebugUtilsMessengerCreateInfoEXT) void {
         create_info.* = .{
             .flags = .{},
             .message_severity = .{
-                .verbose_bit_ext = true,
-                .warning_bit_ext = true,
-                .error_bit_ext = true,
+                .verbose_ext = true,
+                .warning_ext = true,
+                .error_ext = true,
             },
             .message_type = .{
-                .general_bit_ext = true,
-                .validation_bit_ext = true,
-                .performance_bit_ext = true,
+                .general_ext = true,
+                .validation_ext = true,
+                .performance_ext = true,
             },
             .pfn_user_callback = debugCallback,
             .p_user_data = null,
@@ -298,9 +248,7 @@ const HelloTriangleApplication = struct {
     }
 
     fn createSurface(self: *Self) !void {
-        if ((try glfw.createWindowSurface(self.instance, self.window.?, null, &self.surface)) != @enumToInt(vk.Result.success)) {
-            return error.SurfaceInitFailed;
-        }
+        try glfw.createWindowSurface(self.instance, self.window.?, null, &self.surface);
     }
 
     fn pickPhysicalDevice(self: *Self) !void {
@@ -322,7 +270,7 @@ const HelloTriangleApplication = struct {
             }
         }
 
-        if (self.physical_device == .null_handle) {
+        if (self.physical_device == null_physical_device) {
             return error.NoSuitableDevice;
         }
     }
@@ -351,20 +299,16 @@ const HelloTriangleApplication = struct {
             .queue_create_info_count = queue_create_info.len,
             .p_queue_create_infos = &queue_create_info,
             .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
+            .pp_enabled_layer_names = null,
             .enabled_extension_count = device_extensions.len,
             .pp_enabled_extension_names = &device_extensions,
             .p_enabled_features = null,
         };
 
-        if (enable_validation_layers) {
-            create_info.enabled_layer_count = validation_layers.len;
-            create_info.pp_enabled_layer_names = &validation_layers;
-        }
 
         self.device = try self.vki.createDevice(self.physical_device, &create_info, null);
 
-        self.vkd = try DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr);
+        self.vkd = DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr.?);
 
         self.graphics_queue = self.vkd.getDeviceQueue(self.device, indices.graphics_family.?, 0);
         self.present_queue = self.vkd.getDeviceQueue(self.device, indices.present_family.?, 0);
@@ -380,7 +324,7 @@ const HelloTriangleApplication = struct {
 
         var image_count = swap_chain_support.capabilities.min_image_count + 1;
         if (swap_chain_support.capabilities.max_image_count > 0) {
-            image_count = std.math.min(image_count, swap_chain_support.capabilities.max_image_count);
+            image_count = @min(image_count, swap_chain_support.capabilities.max_image_count);
         }
 
         const indices = try self.findQueueFamilies(self.physical_device);
@@ -398,15 +342,15 @@ const HelloTriangleApplication = struct {
             .image_color_space = surface_format.color_space,
             .image_extent = extent,
             .image_array_layers = 1,
-            .image_usage = .{ .color_attachment_bit = true },
+            .image_usage = .{ .color_attachment = true },
             .image_sharing_mode = sharing_mode,
             .queue_family_index_count = queue_family_indices.len,
             .p_queue_family_indices = &queue_family_indices,
             .pre_transform = swap_chain_support.capabilities.current_transform,
-            .composite_alpha = .{ .opaque_bit_khr = true },
+            .composite_alpha = .{ .opaque_khr = true },
             .present_mode = present_mode,
-            .clipped = vk.TRUE,
-            .old_swapchain = .null_handle,
+            .clipped = .true,
+            .old_swapchain = .null,
         }, null);
 
         _ = try self.vkd.getSwapchainImagesKHR(self.device, self.swap_chain, &image_count, null);
@@ -420,7 +364,7 @@ const HelloTriangleApplication = struct {
     fn createImageViews(self: *Self) !void {
         self.swap_chain_image_views = try self.allocator.alloc(vk.ImageView, self.swap_chain_images.?.len);
 
-        for (self.swap_chain_images.?) |image, i| {
+        for (self.swap_chain_images.?, 0..) |image, i| {
             self.swap_chain_image_views.?[i] = try self.vkd.createImageView(self.device, &.{
                 .flags = .{},
                 .image = image,
@@ -428,7 +372,7 @@ const HelloTriangleApplication = struct {
                 .format = self.swap_chain_image_format,
                 .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
                 .subresource_range = .{
-                    .aspect_mask = .{ .color_bit = true },
+                    .aspect_mask = .{ .color = true },
                     .base_mip_level = 0,
                     .level_count = 1,
                     .base_array_layer = 0,
@@ -442,7 +386,7 @@ const HelloTriangleApplication = struct {
         const color_attachment = [_]vk.AttachmentDescription{.{
             .flags = .{},
             .format = self.swap_chain_image_format,
-            .samples = .{ .@"1_bit" = true },
+            .samples = .{ .@"1" = true },
             .load_op = .clear,
             .store_op = .store,
             .stencil_load_op = .dont_care,
@@ -472,10 +416,10 @@ const HelloTriangleApplication = struct {
         const dependencies = [_]vk.SubpassDependency{.{
             .src_subpass = vk.SUBPASS_EXTERNAL,
             .dst_subpass = 0,
-            .src_stage_mask = .{ .color_attachment_output_bit = true },
+            .src_stage_mask = .{ .color_attachment_output = true },
             .src_access_mask = .{},
-            .dst_stage_mask = .{ .color_attachment_output_bit = true },
-            .dst_access_mask = .{ .color_attachment_write_bit = true },
+            .dst_stage_mask = .{ .color_attachment_output = true },
+            .dst_access_mask = .{ .color_attachment_write = true },
             .dependency_flags = .{},
         }};
 
@@ -499,14 +443,14 @@ const HelloTriangleApplication = struct {
         const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
             .{
                 .flags = .{},
-                .stage = .{ .vertex_bit = true },
+                .stage = .{ .vertex = true },
                 .module = vert_shader_module,
                 .p_name = "main",
                 .p_specialization_info = null,
             },
             .{
                 .flags = .{},
-                .stage = .{ .fragment_bit = true },
+                .stage = .{ .fragment = true },
                 .module = frag_shader_module,
                 .p_name = "main",
                 .p_specialization_info = null,
@@ -524,7 +468,7 @@ const HelloTriangleApplication = struct {
         const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
             .flags = .{},
             .topology = .triangle_list,
-            .primitive_restart_enable = vk.FALSE,
+            .primitive_restart_enable = .false,
         };
 
         const viewport_state = vk.PipelineViewportStateCreateInfo{
@@ -537,12 +481,12 @@ const HelloTriangleApplication = struct {
 
         const rasterizer = vk.PipelineRasterizationStateCreateInfo{
             .flags = .{},
-            .depth_clamp_enable = vk.FALSE,
-            .rasterizer_discard_enable = vk.FALSE,
+            .depth_clamp_enable = .false,
+            .rasterizer_discard_enable = .false,
             .polygon_mode = .fill,
-            .cull_mode = .{ .back_bit = true },
+            .cull_mode = .{ .back = true },
             .front_face = .clockwise,
-            .depth_bias_enable = vk.FALSE,
+            .depth_bias_enable = .false,
             .depth_bias_constant_factor = 0,
             .depth_bias_clamp = 0,
             .depth_bias_slope_factor = 0,
@@ -551,28 +495,28 @@ const HelloTriangleApplication = struct {
 
         const multisampling = vk.PipelineMultisampleStateCreateInfo{
             .flags = .{},
-            .rasterization_samples = .{ .@"1_bit" = true },
-            .sample_shading_enable = vk.FALSE,
+            .rasterization_samples = .{ .@"1" = true },
+            .sample_shading_enable = .false,
             .min_sample_shading = 1,
             .p_sample_mask = null,
-            .alpha_to_coverage_enable = vk.FALSE,
-            .alpha_to_one_enable = vk.FALSE,
+            .alpha_to_coverage_enable = .false,
+            .alpha_to_one_enable = .false,
         };
 
         const color_blend_attachment = [_]vk.PipelineColorBlendAttachmentState{.{
-            .blend_enable = vk.FALSE,
+            .blend_enable = .false,
             .src_color_blend_factor = .one,
             .dst_color_blend_factor = .zero,
             .color_blend_op = .add,
             .src_alpha_blend_factor = .one,
             .dst_alpha_blend_factor = .zero,
             .alpha_blend_op = .add,
-            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+            .color_write_mask = .{ .r = true, .g = true, .b = true, .a = true },
         }};
 
         const color_blending = vk.PipelineColorBlendStateCreateInfo{
             .flags = .{},
-            .logic_op_enable = vk.FALSE,
+            .logic_op_enable = .false,
             .logic_op = .copy,
             .attachment_count = color_blend_attachment.len,
             .p_attachments = &color_blend_attachment,
@@ -610,24 +554,23 @@ const HelloTriangleApplication = struct {
             .layout = self.pipeline_layout,
             .render_pass = self.render_pass,
             .subpass = 0,
-            .base_pipeline_handle = .null_handle,
+            .base_pipeline_handle = .null,
             .base_pipeline_index = -1,
         }};
 
         _ = try self.vkd.createGraphicsPipelines(
             self.device,
-            .null_handle,
-            pipeline_info.len,
+            .null,
             &pipeline_info,
             null,
-            @ptrCast([*]vk.Pipeline, &self.graphics_pipeline),
+            (&self.graphics_pipeline)[0..1],
         );
     }
 
     fn createFramebuffers(self: *Self) !void {
         self.swap_chain_framebuffers = try self.allocator.alloc(vk.Framebuffer, self.swap_chain_image_views.?.len);
 
-        for (self.swap_chain_framebuffers.?) |*framebuffer, i| {
+        for (self.swap_chain_framebuffers.?, 0..) |*framebuffer, i| {
             const attachments = [_]vk.ImageView{self.swap_chain_image_views.?[i]};
 
             framebuffer.* = try self.vkd.createFramebuffer(self.device, &.{
@@ -646,7 +589,7 @@ const HelloTriangleApplication = struct {
         const queue_family_indices = try self.findQueueFamilies(self.physical_device);
 
         self.command_pool = try self.vkd.createCommandPool(self.device, &.{
-            .flags = .{ .reset_command_buffer_bit = true },
+            .flags = .{ .reset_command_buffer = true },
             .queue_family_index = queue_family_indices.graphics_family.?,
         }, null);
     }
@@ -656,7 +599,7 @@ const HelloTriangleApplication = struct {
             .command_pool = self.command_pool,
             .level = .primary,
             .command_buffer_count = 1,
-        }, @ptrCast([*]vk.CommandBuffer, &self.command_buffer));
+        }, @as([*]vk.CommandBuffer, @ptrCast(&self.command_buffer)));
     }
 
     fn recordCommandBuffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32) !void {
@@ -687,18 +630,18 @@ const HelloTriangleApplication = struct {
             const viewports = [_]vk.Viewport{.{
                 .x = 0,
                 .y = 0,
-                .width = @intToFloat(f32, self.swap_chain_extent.width),
-                .height = @intToFloat(f32, self.swap_chain_extent.height),
+                .width = @as(f32, @floatFromInt(self.swap_chain_extent.width)),
+                .height = @as(f32, @floatFromInt(self.swap_chain_extent.height)),
                 .min_depth = 0,
                 .max_depth = 1,
             }};
-            self.vkd.cmdSetViewport(command_buffer, 0, viewports.len, &viewports);
+            self.vkd.cmdSetViewport(command_buffer, 0, &viewports);
 
             const scissors = [_]vk.Rect2D{.{
                 .offset = .{ .x = 0, .y = 0 },
                 .extent = self.swap_chain_extent,
             }};
-            self.vkd.cmdSetScissor(command_buffer, 0, scissors.len, &scissors);
+            self.vkd.cmdSetScissor(command_buffer, 0, &scissors);
 
             self.vkd.cmdDraw(command_buffer, 3, 1, 0, 0);
         }
@@ -710,20 +653,20 @@ const HelloTriangleApplication = struct {
     fn createSyncObjects(self: *Self) !void {
         self.image_available_semaphore = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
         self.render_finished_semaphore = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
-        self.in_flight_fence = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
+        self.in_flight_fence = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled = true } }, null);
     }
 
     fn drawFrame(self: *Self) !void {
-        _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fence), vk.TRUE, std.math.maxInt(u64));
-        try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fence));
+        _ = try self.vkd.waitForFences(self.device, (&self.in_flight_fence)[0..1], .true, std.math.maxInt(u64));
+        try self.vkd.resetFences(self.device, (&self.in_flight_fence)[0..1]);
 
-        const result = try self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphore, .null_handle);
+        const result = try self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphore, .null);
 
         try self.vkd.resetCommandBuffer(self.command_buffer, .{});
         try self.recordCommandBuffer(self.command_buffer, result.image_index);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphore};
-        const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
+        const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output = true }};
         const signal_semaphores = [_]vk.Semaphore{self.render_finished_semaphore};
 
         const submit_info = vk.SubmitInfo{
@@ -731,18 +674,18 @@ const HelloTriangleApplication = struct {
             .p_wait_semaphores = &wait_semaphores,
             .p_wait_dst_stage_mask = &wait_stages,
             .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &self.command_buffer),
+            .p_command_buffers = @as([*]const vk.CommandBuffer, @ptrCast(&self.command_buffer)),
             .signal_semaphore_count = signal_semaphores.len,
             .p_signal_semaphores = &signal_semaphores,
         };
-        _ = try self.vkd.queueSubmit(self.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fence);
+        _ = try self.vkd.queueSubmit(self.graphics_queue, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fence);
 
         _ = try self.vkd.queuePresentKHR(self.present_queue, &.{
             .wait_semaphore_count = signal_semaphores.len,
             .p_wait_semaphores = &signal_semaphores,
             .swapchain_count = 1,
-            .p_swapchains = @ptrCast([*]const vk.SwapchainKHR, &self.swap_chain),
-            .p_image_indices = @ptrCast([*]const u32, &result.image_index),
+            .p_swapchains = @as([*]const vk.SwapchainKHR, @ptrCast(&self.swap_chain)),
+            .p_image_indices = @as([*]const u32, @ptrCast(&result.image_index)),
             .p_results = null,
         });
     }
@@ -751,7 +694,7 @@ const HelloTriangleApplication = struct {
         return try self.vkd.createShaderModule(self.device, &.{
             .flags = .{},
             .code_size = code.len,
-            .p_code = @ptrCast([*]const u32, code),
+            .p_code = @as([*]const u32, @alignCast(@ptrCast(code))),
         }, null);
     }
 
@@ -779,11 +722,11 @@ const HelloTriangleApplication = struct {
         if (capabilities.current_extent.width != 0xFFFF_FFFF) {
             return capabilities.current_extent;
         } else {
-            const window_size = try self.window.?.getFramebufferSize();
+            const window_size = self.window.?.getFramebufferSize();
 
             return vk.Extent2D{
-                .width = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
-                .height = std.math.clamp(window_size.height, capabilities.min_image_extent.height, capabilities.max_image_extent.height),
+                .width = std.math.clamp(@as(u32, @intCast(window_size[0])), capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+                .height = std.math.clamp(@as(u32, @intCast(window_size[1])), capabilities.min_image_extent.height, capabilities.max_image_extent.height),
             };
         }
     }
@@ -863,11 +806,11 @@ const HelloTriangleApplication = struct {
         defer self.allocator.free(queue_families);
         self.vki.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
 
-        for (queue_families) |queue_family, i| {
-            if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit) {
-                indices.graphics_family = @intCast(u32, i);
-            } else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(u32, i), self.surface)) == vk.TRUE) {
-                indices.present_family = @intCast(u32, i);
+        for (queue_families, 0..) |queue_family, i| {
+            if (indices.graphics_family == null and queue_family.queue_flags.graphics) {
+                indices.graphics_family = @as(u32, @intCast(i));
+            } else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @as(u32, @intCast(i)), self.surface)) == .true) {
+                indices.present_family = @as(u32, @intCast(i));
             }
 
             if (indices.isComplete()) {
@@ -878,12 +821,12 @@ const HelloTriangleApplication = struct {
         return indices;
     }
 
-    fn getRequiredExtensions(allocator: Allocator) !std.ArrayListAligned([*:0]const u8, null) {
-        var extensions = std.ArrayList([*:0]const u8).init(allocator);
+    fn getRequiredExtensions(allocator: Allocator) !std.array_list.Managed([*:0]const u8) {
+        var extensions = std.array_list.Managed([*:0]const u8).init(allocator);
         try extensions.appendSlice(try glfw.getRequiredInstanceExtensions());
 
         if (enable_validation_layers) {
-            try extensions.append(vk.extension_info.ext_debug_utils.name);
+            try extensions.append(vk.instance_extensions.ext_debug_utils.name);
         }
 
         return extensions;
@@ -893,7 +836,7 @@ const HelloTriangleApplication = struct {
         var layer_count: u32 = undefined;
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, null);
 
-        var available_layers = try self.allocator.alloc(vk.LayerProperties, layer_count);
+        const available_layers = try self.allocator.alloc(vk.LayerProperties, layer_count);
         defer self.allocator.free(available_layers);
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, available_layers.ptr);
 
@@ -919,20 +862,20 @@ const HelloTriangleApplication = struct {
 
     fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
         if (p_callback_data != null) {
-            std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message});
+            std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message orelse "unknown"});
         }
 
-        return vk.FALSE;
+        return .false;
     }
 };
 
 pub fn main() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var safe_allocator = std.heap.SafeAllocator.init(std.heap.page_allocator, .{});
     defer {
-        const leaked = gpa.deinit();
-        if (leaked) std.log.err("MemLeak", .{});
+        const leaks = safe_allocator.deinit();
+        if (leaks != 0) std.log.err("MemLeak: {d} allocations", .{leaks});
     }
-    const allocator = gpa.allocator();
+    const allocator = safe_allocator.allocator();
 
     var app = HelloTriangleApplication.init(allocator);
     defer app.deinit();
